@@ -1,0 +1,37 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Env
+.env
+
+# Logs
+*.log
+
+# Data
+data/
+*.pdf
+
+# Node
+node_modules/
+build/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/settings.json
+.idea/
+
+
+.notes.md
+consolidation.md
+consolidation.docx
+pitch_projet.md
+pitch_projet.docx
+modele_presentation.md
+modele_presentation.docx
+generate_pitch_docx.ps1
+generate_consolidation_docx.ps1
+generate_modele_docx.ps1

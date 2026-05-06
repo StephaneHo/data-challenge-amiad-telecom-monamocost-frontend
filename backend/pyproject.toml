@@ -1,0 +1,24 @@
+[project]
+name = "rag-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.18.4",
+    "apscheduler>=3.11.2",
+    "arxiv>=2.1.0",
+    "fastapi>=0.135.2",
+    "loguru>=0.7.3",
+    "openai>=2.30.0",
+    "pgvector>=0.4.2",
+    "psycopg2-binary>=2.9.11",
+    "pydantic-settings>=2.13.1",
+    "pylint>=4.0.5",
+    "requests<2.33",
+    "sentence-transformers>=5.3.0",
+    "sqlalchemy>=2.0.48",
+    "tenacity>=9.1.4",
+    "transformers>=5.4.0",
+    "uvicorn>=0.42.0",
+]

@@ -1,0 +1,80 @@
+
+
+services:
+
+  # -------------------------
+  # Base de données PostgreSQL + pgvector
+  # -------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: postgres-rag
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - am-net
+
+  # -------------------------
+  # Redis
+  # -------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis-am
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - am-net
+
+  # -------------------------
+  # Backend (FastAPI)
+  # -------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: am-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/rag
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - am-net
+
+# -------------------------
+# Volumes
+# -------------------------
+volumes:
+  postgres_data:
+
+# -------------------------
+# Réseau
+# -------------------------
+networks:
+  am-net:
+    driver: bridge
