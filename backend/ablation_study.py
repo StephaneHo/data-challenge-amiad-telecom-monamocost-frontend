@@ -36,6 +36,7 @@ from loguru import logger
 
 from api.challenge import ChallengeInput, ChallengeRunner
 from database.db import get_session
+from utils.metrics import aggregate_metrics, compute_query_metrics
 
 
 _DOC_ALIAS: dict[str, str] = {
@@ -61,9 +62,15 @@ class AblationConfig:
 class AblationResult:
     config: dict
     n_questions: int
-    # Tâche 1
-    hits_at_5: float = 0.0
-    hits_at_10: float = 0.0
+    # Tâche 1 — métriques RI officielles
+    precision_at_5: float = 0.0
+    precision_at_10: float = 0.0
+    recall_at_5: float = 0.0
+    recall_at_10: float = 0.0
+    map_score: float = 0.0
+    mrr: float = 0.0
+    ndcg_at_5: float = 0.0
+    ndcg_at_10: float = 0.0
     # Tâche 2 (proxy F1)
     attribution_precision: float = 0.0
     attribution_recall: float = 0.0
@@ -106,9 +113,7 @@ def _evaluate_run_with_gold(
     """Variante explicite : prend les gold pages séparément."""
     out = runner.run(payload, with_task2=True)
 
-    hits_5 = 0
-    hits_10 = 0
-    n_q = 0
+    per_query_metrics = []
     n_correct = 0
     n_attributed_total = 0
     pages_hit: list[int] = []
@@ -116,7 +121,6 @@ def _evaluate_run_with_gold(
     n_sentences_total = 0
     n_sentences_empty = 0
     co2_total = 0.0
-    runtime_total = 0.0
 
     task1_results = {r.qid: r for r in out.task1.results}
     task2_results = {r.qid: r for r in out.task2.results} if out.task2 else {}
@@ -124,17 +128,14 @@ def _evaluate_run_with_gold(
     for qid, gold_pages in gold_by_qid.items():
         if not gold_pages:
             continue
-        n_q += 1
         t1 = task1_results.get(qid)
         if t1 is None:
             continue
 
-        retrieved_top5 = {(r.doc_name, r.page) for r in t1.retrieved[:5]}
-        retrieved_top10 = {(r.doc_name, r.page) for r in t1.retrieved[:10]}
-        if gold_pages & retrieved_top5:
-            hits_5 += 1
-        if gold_pages & retrieved_top10:
-            hits_10 += 1
+        # Métriques RI officielles
+        retrieved = [(r.doc_name, r.page) for r in t1.retrieved]
+        qm = compute_query_metrics(qid, retrieved, gold_pages)
+        per_query_metrics.append(qm)
 
         # Tâche 2
         t2 = task2_results.get(qid)
@@ -154,28 +155,33 @@ def _evaluate_run_with_gold(
             pages_hit.append(len(covered))
             n_gold_pages.append(len(gold_pages))
 
-        # Empreinte (somme sur les questions)
-        carbon = (t1.metadata or {}).get("tokens_used", 0)
-        # Note : RAGResponse a un champ carbon mais on l'a perdu dans Task1Result.
-        # On fait une estimation grossière depuis tokens_used.
-        co2_total += carbon * 0.04 / 1000_000.0 * 1000.0  # g CO2
+        # Empreinte (estimation grossière depuis tokens_used)
+        tokens = (t1.metadata or {}).get("tokens_used", 0)
+        co2_total += tokens * 0.04 / 1000_000.0 * 1000.0  # g CO2
 
+    agg = aggregate_metrics(per_query_metrics) if per_query_metrics else {}
     precision = n_correct / max(n_attributed_total, 1)
     recall = (sum(pages_hit) / max(sum(n_gold_pages), 1)) if n_gold_pages else 0.0
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
 
     return AblationResult(
         config={},  # rempli par l'appelant
-        n_questions=n_q,
-        hits_at_5=hits_5 / max(n_q, 1),
-        hits_at_10=hits_10 / max(n_q, 1),
+        n_questions=len(per_query_metrics),
+        precision_at_5=agg.get("precision_at_5", 0.0),
+        precision_at_10=agg.get("precision_at_10", 0.0),
+        recall_at_5=agg.get("recall_at_5", 0.0),
+        recall_at_10=agg.get("recall_at_10", 0.0),
+        map_score=agg.get("MAP", 0.0),
+        mrr=agg.get("MRR", 0.0),
+        ndcg_at_5=agg.get("ndcg_at_5", 0.0),
+        ndcg_at_10=agg.get("ndcg_at_10", 0.0),
         attribution_precision=round(precision, 4),
         attribution_recall=round(recall, 4),
         attribution_f1=round(f1, 4),
         n_sentences_total=n_sentences_total,
         n_sentences_empty=n_sentences_empty,
         co2_g_total=round(co2_total, 4),
-        runtime_seconds=round(runtime_total, 2),
+        runtime_seconds=0.0,
     )
 
 
@@ -276,9 +282,9 @@ def main() -> int:
             res.config = asdict(cfg)
             results.append(res.to_dict())
             logger.info(
-                f"[Ablation] {cfg.name} : hits@5={res.hits_at_5:.3f} "
-                f"hits@10={res.hits_at_10:.3f} "
-                f"attr_F1={res.attribution_f1:.3f} "
+                f"[Ablation] {cfg.name} : "
+                f"NDCG@10={res.ndcg_at_10:.3f} MAP={res.map_score:.3f} MRR={res.mrr:.3f} "
+                f"| attr_F1={res.attribution_f1:.3f} "
                 f"sent_empty={res.n_sentences_empty}/{res.n_sentences_total}"
             )
 
@@ -291,14 +297,18 @@ def main() -> int:
     lines = [
         "# Ablation Study — Mon Amo Cost",
         "",
-        "| Config | hits@5 | hits@10 | Attribution F1 | Sent. empty | n_q |",
-        "|---|---|---|---|---|---|",
+        "| Config | NDCG@10 | NDCG@5 | MAP | MRR | P@5 | R@5 | Attr F1 | Sent [] | n_q |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         lines.append(
             f"| {r['config']['name']} | "
-            f"{r['hits_at_5']:.3f} | "
-            f"{r['hits_at_10']:.3f} | "
+            f"{r['ndcg_at_10']:.3f} | "
+            f"{r['ndcg_at_5']:.3f} | "
+            f"{r['map_score']:.3f} | "
+            f"{r['mrr']:.3f} | "
+            f"{r['precision_at_5']:.3f} | "
+            f"{r['recall_at_5']:.3f} | "
             f"{r['attribution_f1']:.3f} | "
             f"{r['n_sentences_empty']}/{r['n_sentences_total']} | "
             f"{r['n_questions']} |"
