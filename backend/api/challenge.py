@@ -169,6 +169,9 @@ class ChallengeRunner:
 
         task1_results: list[Task1Result] = []
         task2_results: list[Task2Result] = []
+        # Stockage interne des AttributedSentence (avec source) pour les outils
+        # d'ablation/debug — pas sérialisé dans le JSON officiel.
+        self._last_debug_attributions: dict[str, list[AttributedSentence]] = {}
 
         for q in payload.results:
             logger.info(f"[Challenge] {q.qid} : {q.question[:80]}...")
@@ -214,6 +217,7 @@ class ChallengeRunner:
                     entity_filter=self.attribution_entity_filter,
                     entity_min_support_ratio=self.attribution_entity_min_support_ratio,
                 )
+                self._last_debug_attributions[q.qid] = sentences
                 task2_results.append(
                     Task2Result(
                         qid=q.qid,

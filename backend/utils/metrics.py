@@ -138,3 +138,124 @@ def aggregate_metrics(per_query: list[QueryMetrics]) -> dict[str, float]:
     out["MAP"] = out.pop("ap")
     out["MRR"] = out.pop("rr")
     return out
+
+
+# ──────────────── Tâche 2 — métriques d'attribution ──────────────────────
+
+@dataclass
+class AttributionMetrics:
+    """Métriques pour la Tâche 2 du challenge EvalLLM 2026.
+
+    Deux blocs de métriques **distincts** comme demandé par le règlement :
+
+    - **Bloc attribution** (segments sourcés) : Précision, Rappel, F1 sur les
+      paires `(doc_name, page)` attribuées vs gold (par phrase).
+    - **Bloc `[]`** (segments non sourcés) : Précision, Rappel, F1 sur la classe
+      « non sourcé » — mesure la fiabilité de la détection d'hallucinations,
+      de connaissances générales et de mise en forme.
+    """
+
+    n_sentences: int
+    # Bloc attribution
+    attribution_precision: float
+    attribution_recall: float
+    attribution_f1: float
+    # Bloc [] (détection des phrases non sourcées)
+    empty_precision: float
+    empty_recall: float
+    empty_f1: float
+    n_predicted_empty: int
+    n_gold_empty: int
+    n_both_empty: int
+
+    def to_dict(self) -> dict:
+        return {
+            "n_sentences": self.n_sentences,
+            "attribution": {
+                "precision": round(self.attribution_precision, 4),
+                "recall": round(self.attribution_recall, 4),
+                "f1": round(self.attribution_f1, 4),
+            },
+            "empty_detection": {
+                "precision": round(self.empty_precision, 4),
+                "recall": round(self.empty_recall, 4),
+                "f1": round(self.empty_f1, 4),
+                "n_predicted_empty": self.n_predicted_empty,
+                "n_gold_empty": self.n_gold_empty,
+                "n_both_empty": self.n_both_empty,
+            },
+        }
+
+
+def _f1(p: float, r: float) -> float:
+    return (2 * p * r / (p + r)) if (p + r) > 0 else 0.0
+
+
+def compute_attribution_metrics(
+    predicted: list[tuple[str, set[Pair]]],
+    gold: list[tuple[str, set[Pair]]],
+) -> AttributionMetrics:
+    """
+    Calcule les deux blocs de métriques de la Tâche 2.
+
+    Args:
+        predicted : liste de (sid, set des (doc, page) attribués) ; set vide = `[]`
+        gold      : même structure pour les annotations de référence
+
+    Les listes doivent être **alignées par sid** : le i-ème élément de
+    `predicted` correspond au i-ème de `gold`. Les sid présents d'un seul
+    côté lèvent une ValueError.
+    """
+    if len(predicted) != len(gold):
+        raise ValueError(
+            f"Tailles incohérentes : predicted={len(predicted)} vs gold={len(gold)}"
+        )
+
+    # Vérifie l'alignement par sid
+    for (sid_p, _), (sid_g, _) in zip(predicted, gold):
+        if sid_p != sid_g:
+            raise ValueError(f"Sid désynchronisé : predicted={sid_p} gold={sid_g}")
+
+    # ── Bloc attribution : micro-moyenne sur l'ensemble des paires (doc, page)
+    # prédites vs gold. Chaque sid contribue ses paires.
+    tp_attr = 0  # paires prédites qui sont dans le gold
+    fp_attr = 0  # paires prédites qui ne sont pas dans le gold
+    fn_attr = 0  # paires gold qui ne sont pas prédites
+
+    # ── Bloc [] : classification binaire par segment
+    n_predicted_empty = 0
+    n_gold_empty = 0
+    n_both_empty = 0
+
+    for (_, pred_set), (_, gold_set) in zip(predicted, gold):
+        tp_attr += len(pred_set & gold_set)
+        fp_attr += len(pred_set - gold_set)
+        fn_attr += len(gold_set - pred_set)
+
+        is_pred_empty = len(pred_set) == 0
+        is_gold_empty = len(gold_set) == 0
+        if is_pred_empty:
+            n_predicted_empty += 1
+        if is_gold_empty:
+            n_gold_empty += 1
+        if is_pred_empty and is_gold_empty:
+            n_both_empty += 1
+
+    p_attr = tp_attr / (tp_attr + fp_attr) if (tp_attr + fp_attr) else 0.0
+    r_attr = tp_attr / (tp_attr + fn_attr) if (tp_attr + fn_attr) else 0.0
+
+    p_empty = n_both_empty / n_predicted_empty if n_predicted_empty else 0.0
+    r_empty = n_both_empty / n_gold_empty if n_gold_empty else 0.0
+
+    return AttributionMetrics(
+        n_sentences=len(predicted),
+        attribution_precision=p_attr,
+        attribution_recall=r_attr,
+        attribution_f1=_f1(p_attr, r_attr),
+        empty_precision=p_empty,
+        empty_recall=r_empty,
+        empty_f1=_f1(p_empty, r_empty),
+        n_predicted_empty=n_predicted_empty,
+        n_gold_empty=n_gold_empty,
+        n_both_empty=n_both_empty,
+    )

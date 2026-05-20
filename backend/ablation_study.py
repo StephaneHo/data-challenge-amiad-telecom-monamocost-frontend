@@ -71,12 +71,17 @@ class AblationResult:
     mrr: float = 0.0
     ndcg_at_5: float = 0.0
     ndcg_at_10: float = 0.0
-    # Tâche 2 (proxy F1)
+    # Tâche 2 (proxy F1 sur attributions ; gold phrase-level pas dispo en dev)
     attribution_precision: float = 0.0
     attribution_recall: float = 0.0
     attribution_f1: float = 0.0
     n_sentences_total: int = 0
     n_sentences_empty: int = 0
+    # Breakdown des [] par cause (utile sans gold pour comparer les configs)
+    n_empty_markdown: int = 0
+    n_empty_entity_mismatch: int = 0
+    n_empty_embedding: int = 0
+    empty_rate: float = 0.0  # n_sentences_empty / n_sentences_total
     # Empreinte
     co2_g_total: float = 0.0
     runtime_seconds: float = 0.0
@@ -120,6 +125,10 @@ def _evaluate_run_with_gold(
     n_gold_pages: list[int] = []
     n_sentences_total = 0
     n_sentences_empty = 0
+    # Breakdown des [] par cause (depuis les sources internes de l'Attributor)
+    n_empty_markdown = 0
+    n_empty_entity = 0
+    n_empty_embedding = 0
     co2_total = 0.0
 
     task1_results = {r.qid: r for r in out.task1.results}
@@ -155,6 +164,18 @@ def _evaluate_run_with_gold(
             pages_hit.append(len(covered))
             n_gold_pages.append(len(gold_pages))
 
+            # Breakdown des [] par cause (depuis le debug interne du runner)
+            for sent in runner._last_debug_attributions.get(qid, []):
+                if sent.attributed_to:
+                    continue
+                src = sent.sources[0] if sent.sources else "unknown"
+                if src == "markdown":
+                    n_empty_markdown += 1
+                elif src == "entity_mismatch":
+                    n_empty_entity += 1
+                elif src in ("embedding", "unsourced"):
+                    n_empty_embedding += 1
+
         # Empreinte (estimation grossière depuis tokens_used)
         tokens = (t1.metadata or {}).get("tokens_used", 0)
         co2_total += tokens * 0.04 / 1000_000.0 * 1000.0  # g CO2
@@ -180,6 +201,10 @@ def _evaluate_run_with_gold(
         attribution_f1=round(f1, 4),
         n_sentences_total=n_sentences_total,
         n_sentences_empty=n_sentences_empty,
+        n_empty_markdown=n_empty_markdown,
+        n_empty_entity_mismatch=n_empty_entity,
+        n_empty_embedding=n_empty_embedding,
+        empty_rate=round(n_sentences_empty / max(n_sentences_total, 1), 4),
         co2_g_total=round(co2_total, 4),
         runtime_seconds=0.0,
     )
@@ -285,7 +310,8 @@ def main() -> int:
                 f"[Ablation] {cfg.name} : "
                 f"NDCG@10={res.ndcg_at_10:.3f} MAP={res.map_score:.3f} MRR={res.mrr:.3f} "
                 f"| attr_F1={res.attribution_f1:.3f} "
-                f"sent_empty={res.n_sentences_empty}/{res.n_sentences_total}"
+                f"empty_rate={res.empty_rate:.2%} "
+                f"(md={res.n_empty_markdown} ent={res.n_empty_entity_mismatch} emb={res.n_empty_embedding})"
             )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -297,8 +323,10 @@ def main() -> int:
     lines = [
         "# Ablation Study — Mon Amo Cost",
         "",
-        "| Config | NDCG@10 | NDCG@5 | MAP | MRR | P@5 | R@5 | Attr F1 | Sent [] | n_q |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "## Métriques retrieval (Tâche 1)",
+        "",
+        "| Config | NDCG@10 | NDCG@5 | MAP | MRR | P@5 | R@5 |",
+        "|---|---|---|---|---|---|---|",
     ]
     for r in results:
         lines.append(
@@ -308,11 +336,34 @@ def main() -> int:
             f"{r['map_score']:.3f} | "
             f"{r['mrr']:.3f} | "
             f"{r['precision_at_5']:.3f} | "
-            f"{r['recall_at_5']:.3f} | "
-            f"{r['attribution_f1']:.3f} | "
-            f"{r['n_sentences_empty']}/{r['n_sentences_total']} | "
-            f"{r['n_questions']} |"
+            f"{r['recall_at_5']:.3f} |"
         )
+
+    lines += [
+        "",
+        "## Métriques attribution + breakdown des `[]` (Tâche 2)",
+        "",
+        "| Config | Attr F1 | `[]` rate | md | entity | emb | n phrases |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for r in results:
+        lines.append(
+            f"| {r['config']['name']} | "
+            f"{r['attribution_f1']:.3f} | "
+            f"{r['empty_rate']:.2%} | "
+            f"{r['n_empty_markdown']} | "
+            f"{r['n_empty_entity_mismatch']} | "
+            f"{r['n_empty_embedding']} | "
+            f"{r['n_sentences_total']} |"
+        )
+    lines += [
+        "",
+        "_Lecture_ : `md` = phrases vidées par regex markdown ; `entity` = par filtre "
+        "d'entités saillantes ; `emb` = par seuil embedding. Plus la somme est élevée, "
+        "plus le système est conservateur sur les `[]`. Les P/R/F1 sur les `[]` ne sont "
+        "calculables qu'avec un gold phrase-level (voir `eval_attribution.py` quand le "
+        "gold du challenge sera fourni).",
+    ]
     md_path.write_text("\n".join(lines), encoding="utf-8")
     logger.info(f"[Ablation] Tableau markdown : {md_path}")
     return 0
