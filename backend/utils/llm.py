@@ -26,8 +26,9 @@ def get_openai_client() -> Any:
     """
     Retourne un client OpenAI Python SDK configuré selon `.env`.
 
-    - `LLM_BASE_URL=""` → `api.openai.com` officiel.
-    - `LLM_BASE_URL="http://localhost:8000/v1"` → serveur local.
+    - `LLM_BASE_URL=""` → `api.openai.com` officiel (timeout 10 min default).
+    - `LLM_BASE_URL="..."` → serveur local + timeout étendu à 30 min, 0 retry
+      (un retry sur un LLM CPU lent multiplie l'attente).
 
     Si `LLM_API_KEY` est vide, on utilise `OPENAI_API_KEY` ou la valeur de courtoisie
     `"sk-no-key"` (acceptée par la plupart des serveurs locaux).
@@ -38,6 +39,9 @@ def get_openai_client() -> Any:
     kwargs: dict[str, Any] = {"api_key": api_key}
     if settings.LLM_BASE_URL:
         kwargs["base_url"] = settings.LLM_BASE_URL
+        # LLM local sur CPU : un seul appel peut prendre 5-30 min
+        kwargs["timeout"] = 1800.0  # 30 min
+        kwargs["max_retries"] = 0
     return OpenAI(**kwargs)
 
 

@@ -284,9 +284,12 @@ class RAGEngine:
         client = self._build_llm()
 
         if self.llm_provider == "openai":
+            # max_tokens=800 borne la durée de génération sur LLM local lent (Qwen/Mistral
+            # sur CPU peuvent générer indéfiniment). Sur gpt-4o-mini c'est large.
             resp = client.chat.completions.create(
                 model=self.llm_model,
                 temperature=temp,
+                max_tokens=800,
                 messages=[
                     {"role": "system", "content": self._SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
