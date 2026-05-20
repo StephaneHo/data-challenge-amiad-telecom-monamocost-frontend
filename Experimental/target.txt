@@ -1,0 +1,175 @@
+ Cette année, nous présentons un challenge autour des problématiques de Retrieval augmented Generation (RAG) et de l'attribution des sources pour le RAG. Ce challenge se décompose en deux tâches. La première est une tâche classique de RAG, mais avec des requêtes de difficultés variables. Elle sera évaluée sur le partie recherche documentaire (retrieval) via des mesures classiques de RI, et sur la partie génération de la réponse finale.
+
+Les participants seront invités à évaluer leurs mises-en-œuvre sur un ensemble de documents en français, fournis à l'inscription, et de requêtes utilisateurs, fournis uniquement à la phase de test pour la sous-tâche 1 et de réponses à annoter en source pour la sous-tâche 2.
+
+Cette phase de test dure 3 jours (à choisir par les participants dans un intervalle de 3 semaines) ; les résultats leur seront ensuite communiqués.
+
+Les participants devront présenter leurs travaux dans un bref article et sous forme de communication orale ou poster le jour de l'atelier (inscription nécessaire sur le site de la conférence).
+
+Tâche 1 : évaluation du RAG
+Pour cette tâche classique, l'objectif est de produire des réponses pertinentes en s'appuyant sur les bons morceaux (chunks) de documents sources.
+
+Les requêtes fournies à la phase de test pourront nécessiter de retrouver 1 à plusieurs morceaux de documents (chunks) pour fournir une réponse pertinente et complète. Les requêtes auront des niveaux de difficultés variables, reflétant des usages divers les plus réels possibles.
+
+Un ensemble de documents bruts est mis à disposition des participants à línscription. Pour permettre des comparaisons pertinentes, il n'est pas autorisé d'ajouter des documents à la collection ou d'utiliser des capacités de recherche web.
+
+Format
+Les réponses des candidats devront être soumises en respectant le formalisme JSON illustré ci-dessous (voir détails dans les sections dépliables).
+
+Les chunks de référence seront dénotés par des paires (identifiants_du_fichier, numéro_de_page) ; quelle que soit la méthode chunking adoptée par les participants, il est attendu que les résultats produits (dans le champ "retrieved") soit également exprimé de cette façon. Le numéro de page attendu est le numéro physique (ainsi, la couverture d'un document est la page 1, suivi de la page 2, etc.).
+
+Deux ou trois exemples de requêtes seront fournis à l'inscription.
+
+{
+"run_id": "Données illustratives - challenge RAG EvalLLM 2026",
+"parameters": {
+"mon_parametre1": 1,
+"mon_parametre2": 10
+},
+"results": [
+{ /* Question 1 ... */
+"qid": "Q1",
+"question": "Question 1",
+"retrieved": [
+{
+"rank": 1,
+"doc_name": "document1.pdf",
+"page": 17,
+"metadata": {
+"key1": "value1",
+"key2": "value2"
+}
+}
+],
+"answer": "Answer 1",
+"metadata": {
+"key": "value"
+}
+},
+{ /* Question 2 ... */
+"qid": "Q2",
+"question": "Question 2",
+"retrieved": [
+{
+"rank": 1,
+"doc_name": "document11.pdf",
+"page": 42,
+"metadata": {
+"key1": "value1",
+"key2": "value2"
+}
+}
+],
+"answer": "Answer 2",
+"metadata": {
+"key": "value"
+}
+}
+]
+}
+Les questions du challenge seront transmises dans ce même formalisme, avec les données de RI et les réponses finales laissées vides. 
+
+Métriques
+La tâche est évaluée sur deux critères :
+
+la capacité des participants à trouver les bons morceaux de documents. Pour s'affranchir des problèmes de chunking, la granularité choisie est la page ; quel que soit le découpage opéré par le participants, la réponse attendue pour une requête sera un ensemble de (nom_de_document, numéro de page), comme illustré dans le json ci-dessus. Le numéro de page à indiquer est le numéro physique (eg. la couverture d’un magazine est la page 1). Les métriques seront celles usuelles en Recherche d'Informations : Précision, Rappel, NDCG...
+la capacité à formuler une réponse pertinente et complète. Des métriques lexicales ou neuronales (variante de BertScore, ParaPluie) et LLM-as-a-Judge seront employées.
+ Un bonus sera donné aux approches open source et reproductibles et un autre bonus aux approches les plus frugales. 
+
+ 
+
+Tâche 2 : attribution des sources
+La seconde sous-tâche consiste à attribuer les passages de la réponse à des chunks de documents sources.
+
+À partir d'une question, des morceaux de documents récupérés et d'une réponse donnée, les participants doivent produire pour cheque segment de la réponse sa référence documentaire. L'objectif est d'évaluer la capacité des systèmes à ancrer leurs affirmations dans les documents sources tout en identifiant les passages non étayés par ces sources (hallucinations, connaissances générales, éléments de mise en forme).
+
+Les requêtes fournies à la phase de test seront similaires que pour la Tâche 1. La granularité d'annotation attendue est au niveau des phrases qui seront segmentées. Les documents et les chunks récupérés sont identiques à ceux utilisés pour la Tâche 1 ; comme pour la Tâche 1 il n'est pas autorisé d'ajouter des sources externes ni des capacités de recherche web.
+
+
+Exemple illustrative
+Contexte Source : guide_osint_infrastructure_v2.pdf
+"L'analyse des certificats SSL/TLS constitue une étape pivot dans la cartographie d'une infrastructure numérique. Chaque certificat contient des champs spécifiques, tels que le "Common Name" (CN) ou les "Subject Alternative Names" (SAN), qui révèlent souvent des sous-domaines cachés ou des environnements de pré-production. En utilisant des outils de recherche de certificats (CT Logs), un analyste peut identifier des actifs appartenant à une même organisation sans interaction directe avec la cible. Cette technique passive permet de contourner les protections de type pare-feu applicatif qui bloquent les scanners actifs. Il est recommandé de croiser ces données avec les enregistrements DNS historiques pour valider la persistance de l'infrastructure identifiée."
+Question
+Comment l'utilisation des logs de certificats peut-elle aider à découvrir l'infrastructure d'une cible sans se faire repérer ?
+Exemple de Réponse Annotée
+# Méthodologie de reconnaissance passive via SSL[0]
+
+---[0]
+
+L'exploitation des journaux de transparence (CT Logs) permet de découvrir des sous-domaines et des environnements de pré-production à travers l'examen des champs CN et SAN des certificats.[guide_osint_infrastructure_v2.pdf]
+
+Cette approche garantit la discrétion de l'analyste car elle constitue une technique passive, évitant ainsi le déclenchement d'alertes au niveau des pare-feu applicatifs (WAF) qui ciblent habituellement les scans actifs.[guide_osint_infrastructure_v2.pdf]
+
+En complément, il est intéressant de noter que cette phase est souvent la première étape d'une chaîne d'attaque plus complexe appelée "Recon-ng".[0]
+
+Enfin, la validation de ces informations doit impérativement passer par une corrélation avec l'historique des enregistrements DNS.[guide_osint_infrastructure_v2.pdf]
+
+Format
+Les réponses des candidats devront être soumises en respectant le formalisme JSON illustré ci-dessous. Le champ `attributions` contient la réponse segmenté, son identifiant, ainsi que les documents (avec le numéro de page) utilisés comme source.
+
+Deux ou trois exemples de requêtes seront fournis à l'inscription.
+
+{
+  "run_id": "Données illustratives - challenge RAG EvalLLM 2026",
+  "parameters": {
+    "mon_parametre1": 1,
+    "mon_parametre2": 10
+  },
+  "results": [
+    {
+      "qid": "Q1",
+      "attributions": [
+        {
+          "sid": "Q1_s0",
+          "text": "Answer sentence 1 of question 1.",
+          "attributed_to": [
+            { "doc_name": "document1.pdf", "page": 17 }
+          ]
+        },
+        {
+          "sid": "Q1_s1",
+          "text": "Answer sentence 2 of question 1.",
+          "attributed_to": [
+            { "doc_name": "document1.pdf", "page": 17 },
+            { "doc_name": "document2.pdf", "page": 5 }
+          ]
+        },
+        {
+          "sid": "Q1_s2",
+          "text": "Answer sentence 3 of question 1.",
+          "attributed_to": []
+        }
+      ]
+    },
+    {
+      "qid": "Q2",
+      "attributions": [
+        {
+          "sid": "Q2_s0",
+          "text": "Answer sentence 1 of question 2.",
+          "attributed_to": [
+            { "doc_name": "document11.pdf", "page": 42 }
+          ]
+        },
+        {
+          "sid": "Q2_s1",
+          "text": "Answer sentence 2 of question 2.",
+          "attributed_to": []
+        }
+      ]
+    }
+  ]
+}
+
+ 
+Métriques
+
+
+La tâche est évaluée sur deux critères :
+
+la capacité à attribuer correctement chaque segment de la réponse à sa source documentaire. L'évaluation se fait au niveau du document-page. Les métriques seront celles usuelles en classification : Précision, Rappel, F1, calculées sur les segments attribués par rapport aux annotations de référence.
+la capacité à identifier les passages non sourcés. Les segments annotés `[]` seront évalués en précision et en rappel par rapport aux annotations de référence, afin de mesurer la fiabilité de la détection des hallucinations et des contenus sans appui documentaire.
+L'évaluation portera uniquement sur un sous-ensemble des fichiers d'entrée, mais celui-ci ne sera dévoilé aux participants qu'au moment de la présentation des résultats.
+
+
+ Un bonus sera donné aux approches *open source* et reproductibles et un autre bonus aux approches les plus frugales. 

@@ -3,6 +3,10 @@
 __pycache__/
 *.pyc
 
+# Modèles fine-tunés (plusieurs centaines de Mo par checkpoint)
+models/
+backend/models/
+
 # Env
 .env
 

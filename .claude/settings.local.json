@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ls \"c:/Users/steph/AI_Projects/Perso/\" && echo \"---\" && ls \"c:/Users/steph/AI_Projects/Perso/rag-project/\")",
-      "Read(//c/Users/steph/AI_Projects/Perso/**)"
-    ]
-  }
-}

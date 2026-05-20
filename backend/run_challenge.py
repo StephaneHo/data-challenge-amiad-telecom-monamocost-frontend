@@ -1,0 +1,97 @@
+"""
+CLI : exécute Tâche 1 + Tâche 2 du challenge sur un fichier JSON d'entrée
+et écrit les sorties sur disque.
+
+Usage :
+    python run_challenge.py --input ../Experimental/DATA/sample_queries.json
+    python run_challenge.py --input questions.json --out-task1 t1.json --out-task2 t2.json
+    python run_challenge.py --input questions.json --no-task2 --retrieval-only
+    python run_challenge.py --input questions.json --filter-qids Q1,Q4
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from loguru import logger
+
+from api.challenge import ChallengeInput, ChallengeRunner
+from database.db import get_session
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Runner challenge EvalLLM 2026")
+    parser.add_argument("--input", type=Path, required=True, help="JSON input (questions)")
+    parser.add_argument(
+        "--out-task1",
+        type=Path,
+        default=None,
+        help="Chemin du JSON Tâche 1 (défaut: <input>_task1.json à côté de l'input)",
+    )
+    parser.add_argument(
+        "--out-task2",
+        type=Path,
+        default=None,
+        help="Chemin du JSON Tâche 2 (défaut: <input>_task2.json à côté de l'input)",
+    )
+    parser.add_argument("--no-task2", action="store_true", help="Skip l'attribution (Tâche 2)")
+    parser.add_argument("--retrieval-only", action="store_true", help="Skip l'appel LLM")
+    parser.add_argument("--top-k-chunks", type=int, default=20)
+    parser.add_argument("--top-n-pages", type=int, default=10)
+    parser.add_argument("--context-chunks", type=int, default=10)
+    parser.add_argument("--attribution-threshold", type=float, default=0.80)
+    parser.add_argument(
+        "--filter-qids",
+        type=str,
+        default=None,
+        help="Liste de qids séparés par des virgules (ex: 'Q1,Q4') — restreint à ces questions",
+    )
+    args = parser.parse_args()
+
+    raw = json.loads(args.input.read_text(encoding="utf-8"))
+    payload = ChallengeInput.model_validate(raw)
+
+    if args.filter_qids:
+        keep = {q.strip() for q in args.filter_qids.split(",") if q.strip()}
+        payload.results = [q for q in payload.results if q.qid in keep]
+        logger.info(f"[CLI] Filtre qids={sorted(keep)} → {len(payload.results)} questions")
+
+    if not payload.results:
+        logger.error("[CLI] Aucune question à traiter (input vide ou filtre trop strict)")
+        return 1
+
+    with get_session() as session:
+        runner = ChallengeRunner(
+            session=session,
+            top_k_chunks=args.top_k_chunks,
+            top_n_pages=args.top_n_pages,
+            context_chunks=args.context_chunks,
+            attribution_threshold=args.attribution_threshold,
+            retrieval_only=args.retrieval_only,
+        )
+        out = runner.run(payload, with_task2=not args.no_task2)
+
+    base = args.input.with_suffix("")
+    out_task1 = args.out_task1 or base.parent / f"{base.name}_task1.json"
+    out_task1.write_text(
+        json.dumps(out.task1.model_dump(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    logger.info(f"[CLI] Tâche 1 écrite : {out_task1}")
+
+    if out.task2 is not None:
+        out_task2 = args.out_task2 or base.parent / f"{base.name}_task2.json"
+        out_task2.write_text(
+            json.dumps(out.task2.model_dump(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.info(f"[CLI] Tâche 2 écrite : {out_task2}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

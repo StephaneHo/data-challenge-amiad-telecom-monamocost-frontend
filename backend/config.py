@@ -1,35 +1,45 @@
-from pydantic_settings import BaseSettings
 from typing import Optional
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # Valeurs par défaut
-    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/rag"
+    # Base de données
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/am-rag"
     REDIS_URL: Optional[str] = None
 
     # Embeddings
-    # si aucune valeur n'est fournie pas défaut dans .env, c'est cette valeur qui sera utilisée
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_DIM: int = 384
+    # Multilingue FR avec convention de préfixes :
+    #   - documents : "passage: <texte>"
+    #   - requêtes  : "query: <texte>"
+    # Dimensions par modèle : e5-small=384, e5-base=768, e5-large=1024.
+    EMBEDDING_MODEL: str = "intfloat/multilingual-e5-base"
+    EMBEDDING_DIM: int = 768
 
-    # Collecte ArXiv
-    ARXIV_CATEGORIES: list[str] = [
-        "cs.AI",
-        "cs.LG",
-        "cs.CV",
-        "cs.CL",
-        "cs.RO",
-        "cs.CR",
-        "stat.ML",
-    ]
-    ARXIV_MAX_RESULTS: int = 500
+    # Corpus / Ingestion PDF
+    CORPUS_DIR: str = "../Experimental/DATA/Corpus_raw"
+    # Si défini, force le chemin de l'exécutable Tesseract (Windows).
+    # Sur Linux/Docker, laisser vide — `tesseract` est dans le PATH.
+    TESSERACT_CMD: str = ""
+    # Si défini, force le dossier contenant les fichiers `*.traineddata`
+    # (utile sous Windows quand on n'a pas les droits sur Program Files).
+    TESSDATA_DIR: str = ""
+    # Si défini, force le chemin du dossier `bin` de Poppler (Windows).
+    POPPLER_PATH: str = ""
+    OCR_LANG: str = "fra"
+    OCR_DPI: int = 300
+    # Si une page extraite via pdfplumber a moins de N caractères, on bascule en OCR.
+    OCR_FALLBACK_MIN_CHARS: int = 50
+
+    # Chunking
+    CHUNK_MIN_CHARS: int = 50   # paragraphes plus courts ignorés (bruit OCR/headers)
+    CHUNK_MAX_CHARS: int = 1500 # paragraphes plus longs découpés par phrase
 
     # RAG
-    RAG_TOP_K: int = 15  # récupère les 15 meilleurs résultats
-    RAG_CHUNK_SIZE: int = 512  # taille des morceaux de texte (chunk): 512 tokens
-    RAG_CHUNK_OVERLAP: int = 64  # recouvrement des chunks, éviter  que les infromations importantes soit coupées en deux
-    RAG_TEMPERATURE: float = 0.2  # faible température => strict
+    RAG_TOP_K: int = 15
+    RAG_TEMPERATURE: float = 0.2
 
+    # LLM
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     LLM_PROVIDER: str = "openai"

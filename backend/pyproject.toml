@@ -6,11 +6,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.18.4",
-    "apscheduler>=3.11.2",
-    "arxiv>=2.1.0",
     "fastapi>=0.135.2",
     "loguru>=0.7.3",
     "openai>=2.30.0",
+    "pdfplumber>=0.11.0",
     "pgvector>=0.4.2",
     "psycopg2-binary>=2.9.11",
     "pydantic-settings>=2.13.1",
@@ -21,4 +20,17 @@ dependencies = [
     "tenacity>=9.1.4",
     "transformers>=5.4.0",
     "uvicorn>=0.42.0",
+]
+
+[dependency-groups]
+experimental = [
+    "ipykernel>=6.29.0",
+    "jupyter>=1.1.0",
+    "openpyxl>=3.1.0",
+    "pandas>=2.2.0",
+    "pdf2image>=1.17.0",
+    "pdfplumber>=0.11.0",
+    "pillow>=11.0.0",
+    "pymupdf>=1.24.0",
+    "pytesseract>=0.3.13",
 ]

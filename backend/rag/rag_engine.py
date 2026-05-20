@@ -1,226 +1,369 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Optional
+
 import textwrap
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
 from loguru import logger
-from sqlalchemy.orm import Session
-from config import settings
-from sentence_transformers import SentenceTransformer
-import torch
 from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from config import settings
+from pipeline.embedder import Embedder
+from rag.attribution import (
+    AttributedSentence,
+    Attributor,
+    RetrievedChunkForAttribution,
+)
 
 
+# Granularité interne (chunk) — utilisée pour bâtir le contexte LLM.
 @dataclass
 class RetrievedChunk:
-    """un chunk retrouvé par la recherche vectorielle"""
-
-    paper_id: str
-    title: str
-    published_at: Optional[str]
-    venue: Optional[str]
+    doc_name: str
+    page_number: int
+    chunk_index: int
     content: str
-    section: Optional[str]
     score: float
+
+
+# Granularité du challenge ((doc_name, page) ranké) — utilisée pour le JSON de sortie.
+@dataclass
+class RetrievedPage:
+    rank: int
+    doc_name: str
+    page: int
+    score: float
+    n_chunks: int  # combien de chunks de cette page ont matché dans le top-K
 
 
 @dataclass
 class RAGResponse:
-    """La réponse complère du moteur RAG"""
-
-    query: str
+    question: str
     answer: str
-    references: list[dict] = field(default_factory=list)
+    retrieved: list[RetrievedPage] = field(default_factory=list)
+    chunks: list[RetrievedChunk] = field(default_factory=list)
+    parameters: dict[str, Any] = field(default_factory=dict)
     tokens_used: int = 0
-    retrieval_scores: list[float] = field(default_factory=list)
 
 
 class RAGEngine:
     """
-    Moteur RAG pour la veille scientifique
+    Moteur RAG pour le challenge EvalLLM 2026.
 
-    Il vectorise la question
-    Il recherche les chunks les plus proches dans pgvecotr
-    Il envoie ensuite les chunks et la question au LLM
-    Il retourne la question avec les références
+    Pipeline :
+      1. embed la requête (préfixe `query: ` via `Embedder`)
+      2. cherche les top-K chunks par cosinus dans pgvector
+      3. agrège à la granularité (doc_name, page) — le challenge évalue à cette grain-là
+      4. construit un contexte pour le LLM (chunks gardés au max `context_chunks`)
+      5. demande au LLM une réponse avec citations `[doc_name p.N]`
     """
 
-    _SYSTEM_PROMPT = textwrap.dedent("""\
-        Tu es un assistant de veille scientifique.
-        Tu t'appuies uniquement sur les extraits de publications fournis.
-        Tu cites systématiquement tes sources au format [ArXiv:ID].
-        Tu rédiges en français sauf si l'utilisateur écrit en anglais.
-        Tu es rigoureux, factuel et neutre.
-    """)
+    _SYSTEM_PROMPT = textwrap.dedent(
+        """\
+        Tu es un assistant spécialisé en synthèse documentaire pour la défense et le renseignement.
 
-    def _build_llm(self):
-        """On va construire le client LLM selon la config de .env"""
-        provider = settings.LLM_PROVIDER.lower()
-        if provider == "openai":
+        Règles strictes :
+        - Réponds UNIQUEMENT à partir des extraits fournis. N'invente aucun fait.
+        - Cite tes sources à chaque affirmation factuelle au format `[nom_du_document.pdf p.N]`.
+        - Si plusieurs sources convergent sur une même affirmation, cite-les toutes.
+        - Si tu introduis une information de **connaissance générale** ou de mise en
+          contexte qui ne provient pas explicitement des extraits, ne mets PAS de
+          citation derrière. Cette absence de citation signale que la phrase est
+          non sourcée — c'est attendu pour les transitions, titres et mises en perspective.
+        - Si l'information demandée n'est pas du tout dans les extraits, dis-le
+          explicitement plutôt que d'inventer.
+        - Rédige en français, dans un style factuel et synthétique. Utilise des titres
+          markdown (#, ##) pour structurer si la réponse est longue.
+
+        Exemple de réponse bien annotée :
+
+        Contexte fourni : un seul extrait du document `guide_osint_infrastructure_v2.pdf` p.1
+        sur l'analyse des certificats SSL/TLS et l'usage des CT Logs.
+
+        Question : Comment l'utilisation des logs de certificats peut-elle aider à
+        découvrir l'infrastructure d'une cible sans se faire repérer ?
+
+        Réponse attendue :
+
+        # Méthodologie de reconnaissance passive via SSL
+
+        L'exploitation des journaux de transparence (CT Logs) permet de découvrir
+        des sous-domaines et environnements de pré-production en examinant les
+        champs CN et SAN des certificats. [guide_osint_infrastructure_v2.pdf p.1]
+
+        Cette approche garantit la discrétion de l'analyste car elle constitue une
+        technique passive, évitant ainsi le déclenchement d'alertes au niveau des
+        pare-feu applicatifs (WAF) qui ciblent habituellement les scans actifs.
+        [guide_osint_infrastructure_v2.pdf p.1]
+
+        En complément, cette phase est souvent la première étape d'une chaîne
+        d'attaque plus complexe appelée "Recon-ng".
+
+        Enfin, la validation de ces informations doit impérativement passer par
+        une corrélation avec l'historique des enregistrements DNS.
+        [guide_osint_infrastructure_v2.pdf p.1]
+
+        Note : la phrase sur Recon-ng n'a pas de citation car c'est de la connaissance
+        générale, pas dans l'extrait fourni. Le titre `#` n'a pas de citation non plus
+        car c'est de la mise en forme.
+        """
+    )
+
+    def __init__(
+        self,
+        session: Session,
+        embedder: Optional[Embedder] = None,
+        llm_provider: Optional[str] = None,
+        llm_model: Optional[str] = None,
+    ) -> None:
+        self.session = session
+        self.embedder = embedder or Embedder()
+        if self.embedder.dim != settings.EMBEDDING_DIM:
+            raise RuntimeError(
+                f"[RAG] Dim mismatch : embedder={self.embedder.dim}, settings={settings.EMBEDDING_DIM}"
+            )
+        self.llm_provider = (llm_provider or settings.LLM_PROVIDER).lower()
+        self.llm_model = llm_model or settings.LLM_MODEL
+        self._llm_client: Any = None  # initialisé paresseusement
+
+    def _build_llm(self) -> Any:
+        if self._llm_client is not None:
+            return self._llm_client
+        if self.llm_provider == "openai":
             from openai import OpenAI
 
-            return OpenAI(api_key=settings.OPENAI_API_KEY)
-        elif provider == "anthropic":
+            self._llm_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        elif self.llm_provider == "anthropic":
             import anthropic
 
-            return anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        raise ValueError(f"Provider inconnu: {provider}")
+            self._llm_client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        else:
+            raise ValueError(f"Provider LLM inconnu : {self.llm_provider}")
+        return self._llm_client
 
-    def __init__(self, session: Session) -> None:
-        self.session = session
-        logger.info(f"[RAG]: Chargement embedder: {settings.EMBEDDING_MODEL}")
-        self.embedder = SentenceTransformer(settings.EMBEDDING_MODEL)
-        self.llm = self._build_llm()
-        logger.info(f"[RAG] LLM : {settings.LLM_PROVIDER} / {settings.LLM_MODEL}")
+    # ──────────────────────── Retrieval ────────────────────────
 
-    def _retrieve(
+    def retrieve_chunks(
         self,
         query: str,
-        k: int = 5,
-        year_from: int | None = None,
+        k: int = 30,
+        doc_filter: Optional[list[str]] = None,
     ) -> list[RetrievedChunk]:
-        """
-        C'est la première étape du RAG (Retrieval)
-        """
+        """Top-K chunks par similarité cosinus dans pgvector."""
+        qv = self.embedder.encode_query(query)
 
-        """Là, on vectorise la question"""
-        with torch.no_grad():
-            query_vector = self.embedder.encode(
-                query, normalize_embeddings=True
-            ).tolist()
+        sql = (
+            "SELECT doc_name, page_number, chunk_index, content, "
+            "1 - (embedding <=> CAST(:qv AS vector)) AS score "
+            "FROM chunks "
+            "WHERE embedding IS NOT NULL"
+        )
+        params: dict[str, Any] = {"qv": qv, "k": k}
+        if doc_filter:
+            sql += " AND doc_name = ANY(:docs)"
+            params["docs"] = doc_filter
+        sql += " ORDER BY embedding <=> CAST(:qv AS vector) LIMIT :k"
 
-        """ On construit nos params pour la requete SQL"""
-        params = {"query_vector": query_vector, "k": k}
-
-        if year_from:
-            """ TODO: A COMPLETER PLUS TARD """
-            pass
-        """ 
-        Recherche cosinus dans pgvector
-        la distance cosinus est : <=>
-        et 1 - distance, c'est le score de similarité
-        """
-
-        sql = text("""
-            SELECT
-                c.paper_id,
-                p.title,
-                p.published_at,
-                p.venue,
-                c.content,
-                c.section,  
-                1 - (c.embedding <=> CAST(:query_vector AS vector)) AS score
-            FROM paper_chunks c
-            JOIN papers p ON c.paper_id = p.arxiv_id
-            ORDER BY c.embedding <=> CAST(:query_vector AS vector)
-            LIMIT :k    
-        """)
-
-        rows = self.session.execute(sql, params).fetchall()
-
+        rows = self.session.execute(text(sql), params).fetchall()
         return [
             RetrievedChunk(
-                paper_id=r.paper_id,
-                title=r.title,
-                published_at=str(r.published_at.date()) if r.published_at else None,
-                venue=r.venue,
+                doc_name=r.doc_name,
+                page_number=r.page_number,
+                chunk_index=r.chunk_index,
                 content=r.content,
-                section=r.section,
                 score=float(r.score),
             )
             for r in rows
         ]
 
     @staticmethod
-    def _build_context(chunks: list[RetrievedChunk], max_chunks: int = 10) -> str:
-        """Formate les chunks en contexte lisible pour le LLM"""
-        lines: list[str] = []
-
+    def aggregate_to_pages(
+        chunks: list[RetrievedChunk], top_n: Optional[int] = None
+    ) -> list[RetrievedPage]:
+        """
+        Dédoublonne par (doc_name, page) en gardant le meilleur score.
+        Compte aussi le nombre de chunks par page (utile pour le scoring).
+        """
+        best: dict[tuple[str, int], dict[str, Any]] = {}
         for c in chunks:
-            year = c.published_at[:4] if c.published_at else "?"
-            venue = f" - {c.venue}" if c.venue else ""
-            lines.append(f"\[ArXiv:{c.paper_id}] {c.title} ({year}){venue} ---")
-            lines.append(f"[{c.section or 'Body'}] {c.content}")
+            key = (c.doc_name, c.page_number)
+            entry = best.get(key)
+            if entry is None or c.score > entry["score"]:
+                best[key] = {
+                    "doc_name": c.doc_name,
+                    "page": c.page_number,
+                    "score": c.score,
+                    "n_chunks": (entry["n_chunks"] + 1) if entry else 1,
+                }
+            else:
+                entry["n_chunks"] += 1
 
-        return "\n".join(lines)
+        ranked = sorted(best.values(), key=lambda e: e["score"], reverse=True)
+        if top_n is not None:
+            ranked = ranked[:top_n]
+        return [
+            RetrievedPage(
+                rank=i + 1,
+                doc_name=e["doc_name"],
+                page=e["page"],
+                score=round(e["score"], 6),
+                n_chunks=e["n_chunks"],
+            )
+            for i, e in enumerate(ranked)
+        ]
+
+    # ──────────────────────── Génération ────────────────────────
+
+    @staticmethod
+    def _build_context(chunks: list[RetrievedChunk], max_chunks: int = 12) -> str:
+        """Formate les chunks pour le LLM, avec marqueur [doc_name p.N]."""
+        lines: list[str] = []
+        for c in chunks[:max_chunks]:
+            tag = f"[{c.doc_name} p.{c.page_number}]"
+            lines.append(f"{tag}\n{c.content}")
+        return "\n\n---\n\n".join(lines)
 
     @staticmethod
     def _build_prompt(query: str, context: str) -> str:
-        return textwrap.dedent(f"""\
-            Question : {query}
-            
-            Extraits de publications scientifiques:
+        return textwrap.dedent(
+            f"""\
+            Question :
+            {query}
+
+            Extraits des documents sources :
+            ---
             {context}
-            
-            Réponds de façon structurée et précise.
-            
-            Cite tes sources [ArXiv:ID]
-        """)
+            ---
 
-    def _call_llm(
-        self, prompt: str, temperature: float | None = None
-    ) -> tuple[str, int]:
-        """Appelle le LLM et retourne (texte_réponse, tokens utilisés)"""
+            Rédige une réponse structurée et factuelle. Cite tes sources au
+            format `[doc_name p.N]` à chaque affirmation factuelle.
+            """
+        )
+
+    def _call_llm(self, prompt: str, temperature: Optional[float] = None) -> tuple[str, int]:
+        """Retourne (réponse_texte, tokens_utilisés)."""
         temp = temperature if temperature is not None else settings.RAG_TEMPERATURE
-        provider = settings.LLM_PROVIDER.lower()
+        client = self._build_llm()
 
-        if provider == "openai":
-            response = self.llm.chat.completions.create(
-                model=settings.LLM_MODEL,
+        if self.llm_provider == "openai":
+            resp = client.chat.completions.create(
+                model=self.llm_model,
                 temperature=temp,
                 messages=[
                     {"role": "system", "content": self._SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
             )
-            text_out = response.choices[0].message.content
-            tokens = response.usage.total_tokens
+            return resp.choices[0].message.content or "", int(resp.usage.total_tokens)
 
-        else:
-            raise ValueError(f"Provider inconnu: {provider}")
+        if self.llm_provider == "anthropic":
+            resp = client.messages.create(
+                model=self.llm_model,
+                max_tokens=2048,
+                temperature=temp,
+                system=self._SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text_out = "".join(b.text for b in resp.content if getattr(b, "text", None))
+            tokens = int(resp.usage.input_tokens + resp.usage.output_tokens)
+            return text_out, tokens
 
-        logger.debug(f"[RAG] {tokens} tokens utilisés")
-        return text_out, tokens
+        raise ValueError(f"Provider LLM inconnu : {self.llm_provider}")
 
-    @staticmethod
-    def _build_references(chunks: list[RetrievedChunk]) -> list[dict]:
-        """Formate les références pour la réponse"""
-        seen: dict[str, dict] = {}
-        for c in chunks:
-            if c.paper_id not in seen:
-                seen[c.paper_id] = {
-                    "arxiv_id": c.paper_id,
-                    "title": c.title,
-                    "published_at": c.published_at,
-                    "venue": c.venue,
-                    "url": f"https://arxiv.org/abs/{c.paper_id}",
-                    "score": round(c.score, 4),
-                }
-        return list(seen.values())
+    # ──────────────────────── API publique ────────────────────────
 
     def answer(
         self,
         query: str,
-        top_k: int | None = None,
-        year_from: int | None = None,
+        top_k_chunks: Optional[int] = None,
+        top_n_pages: Optional[int] = None,
+        context_chunks: int = 12,
+        doc_filter: Optional[list[str]] = None,
+        retrieval_only: bool = False,
     ) -> RAGResponse:
-        """On répond à la question en utilisant les chunk indexés"""
-        k = top_k or settings.RAG_TOP_K
-        chunks = self._retrieve(query, k=k, year_from=year_from)
+        """
+        Pipeline complet : retrieval → agrégation pages → génération.
+
+        - top_k_chunks : combien de chunks scorer dans pgvector (défaut: RAG_TOP_K * 3)
+        - top_n_pages  : combien de paires (doc, page) renvoyer dans `retrieved`
+                         (défaut : tous les uniques du top-K)
+        - context_chunks : combien de chunks passer au LLM
+        - retrieval_only : court-circuite l'appel LLM (utile pour évaluer le retrieval seul)
+        """
+        k = top_k_chunks or (settings.RAG_TOP_K * 3)
+        chunks = self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
 
         if not chunks:
             return RAGResponse(
-                query=query,
-                answer="Aucun article pertinent trouvé dans la base documentaire",
+                question=query,
+                answer="Aucun extrait pertinent trouvé dans la base documentaire.",
+                parameters=self._params_dict(k=k, top_n=top_n_pages),
             )
 
-        context = self._build_context(chunks)
+        retrieved_pages = self.aggregate_to_pages(chunks, top_n=top_n_pages)
+
+        if retrieval_only:
+            return RAGResponse(
+                question=query,
+                answer="",
+                retrieved=retrieved_pages,
+                chunks=chunks,
+                parameters=self._params_dict(k=k, top_n=top_n_pages),
+            )
+
+        context = self._build_context(chunks, max_chunks=context_chunks)
         prompt = self._build_prompt(query, context)
-        answer_txt, tokens = self._call_llm(prompt)
+        try:
+            answer_txt, tokens = self._call_llm(prompt)
+        except Exception as ex:
+            logger.exception(f"[RAG] Appel LLM échoué : {ex}")
+            answer_txt, tokens = "", 0
 
         return RAGResponse(
-            query=query,
+            question=query,
             answer=answer_txt,
-            references=self._build_references(chunks),
+            retrieved=retrieved_pages,
+            chunks=chunks,
+            parameters=self._params_dict(k=k, top_n=top_n_pages),
             tokens_used=tokens,
-            retrieval_scores=[c.score for c in chunks],
         )
+
+    def attribute(
+        self,
+        qid: str,
+        answer: str,
+        chunks: list[RetrievedChunk],
+        threshold: float = 0.80,
+        topk_per_sentence: int = 1,
+    ) -> list[AttributedSentence]:
+        """
+        Tâche 2 du challenge : attribue chaque phrase de `answer` à un (doc, page)
+        en s'appuyant d'abord sur les citations `[doc.pdf p.N]` puis sur la
+        similarité embedding avec les `chunks` retrieved.
+        """
+        attributor = Attributor(
+            embedder=self.embedder,
+            threshold=threshold,
+            topk_per_sentence=topk_per_sentence,
+        )
+        attribution_chunks = [
+            RetrievedChunkForAttribution(
+                doc_name=c.doc_name,
+                page_number=c.page_number,
+                content=c.content,
+            )
+            for c in chunks
+        ]
+        return attributor.attribute(qid=qid, answer=answer, chunks=attribution_chunks)
+
+    def _params_dict(self, k: int, top_n: Optional[int]) -> dict[str, Any]:
+        return {
+            "embedding_model": self.embedder.model_name,
+            "embedding_dim": self.embedder.dim,
+            "retriever_top_k_chunks": k,
+            "retriever_top_n_pages": top_n,
+            "llm_provider": self.llm_provider,
+            "llm_model": self.llm_model,
+            "temperature": settings.RAG_TEMPERATURE,
+        }

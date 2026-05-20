@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(powershell.exe -ExecutionPolicy Bypass -File c:\\\\Users\\\\steph\\\\AI_Projects\\\\Perso\\\\rag-project\\\\generate_consolidation_docx.ps1)",
-      "PowerShell(powershell.exe -ExecutionPolicy Bypass -File c:\\\\Users\\\\steph\\\\AI_Projects\\\\Perso\\\\rag-project\\\\generate_modele_docx.ps1)"
-    ]
-  }
-}
