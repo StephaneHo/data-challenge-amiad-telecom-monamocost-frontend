@@ -135,9 +135,11 @@ class RAGEngine:
         if self._llm_client is not None:
             return self._llm_client
         if self.llm_provider == "openai":
-            from openai import OpenAI
+            # Supporte les serveurs LLM locaux compatibles OpenAI (vLLM, Ollama, ...)
+            # via LLM_BASE_URL dans config.py.
+            from utils.llm import get_openai_client
 
-            self._llm_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            self._llm_client = get_openai_client()
         elif self.llm_provider == "anthropic":
             import anthropic
 

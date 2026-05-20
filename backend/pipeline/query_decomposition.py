@@ -88,26 +88,25 @@ class QueryDecomposer:
 
     def _llm(self) -> Any:
         if self._client is None:
-            from openai import OpenAI
+            from utils.llm import get_openai_client
 
-            self._client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            self._client = get_openai_client()
         return self._client
 
     def decompose(self, question: str) -> DecompositionResult:
+        from utils.llm import chat_json
+
         if question in self._cache:
             return self._cache[question]
 
         try:
-            resp = self._llm().chat.completions.create(
+            payload = chat_json(
+                self._llm(),
                 model=self.model,
+                system=_SYSTEM_PROMPT,
+                user=_USER_TEMPLATE.format(question=question),
                 temperature=self.temperature,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": _USER_TEMPLATE.format(question=question)},
-                ],
             )
-            payload = json.loads(resp.choices[0].message.content or "{}")
             subs = payload.get("subqueries", [])
             if isinstance(subs, str):
                 subs = [subs]

@@ -92,28 +92,27 @@ class LLMJudge:
 
     def _llm(self) -> Any:
         if self._client is None:
-            from openai import OpenAI
+            from utils.llm import get_openai_client
 
-            self._client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            self._client = get_openai_client()
         return self._client
 
     def score(self, qid: str, question: str, gold_answer: str, candidate_answer: str) -> JudgeScore:
+        from utils.llm import chat_json
+
         prompt = _USER_TEMPLATE.format(
             question=question,
             gold_answer=gold_answer,
             candidate_answer=candidate_answer,
         )
         try:
-            resp = self._llm().chat.completions.create(
+            payload = chat_json(
+                self._llm(),
                 model=self.model,
+                system=_SYSTEM_PROMPT,
+                user=prompt,
                 temperature=self.temperature,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
             )
-            payload = json.loads(resp.choices[0].message.content or "{}")
 
             def _clamp(v: Any) -> int:
                 try:

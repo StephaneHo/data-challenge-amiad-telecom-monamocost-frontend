@@ -45,6 +45,21 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4o-mini"
 
+    # LLM local open-source via API OpenAI-compatible (vLLM / llama-cpp-python / Ollama).
+    # Si LLM_BASE_URL est défini, le client OpenAI pointe sur ce serveur local au lieu
+    # d'api.openai.com. LLM_API_KEY peut rester vide (la plupart des serveurs locaux
+    # acceptent n'importe quelle valeur). Permet d'exécuter Mistral-7B-Instruct, Qwen2.5-7B,
+    # etc. en local pour le bonus frugalité du challenge.
+    # Exemples :
+    #   LLM_BASE_URL=http://localhost:8000/v1   LLM_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+    #   LLM_BASE_URL=http://localhost:11434/v1  LLM_MODEL=qwen2.5:7b-instruct   (Ollama)
+    LLM_BASE_URL: str = ""
+    LLM_API_KEY: str = ""
+    # Beaucoup de serveurs locaux (Ollama notamment) ne supportent pas le mode
+    # `response_format={"type": "json_object"}` d'OpenAI. Quand True, on bascule sur un
+    # prompt strict + parsing tolérant (extraction du premier {...} du texte).
+    LLM_JSON_VIA_PROMPT: bool = False
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
