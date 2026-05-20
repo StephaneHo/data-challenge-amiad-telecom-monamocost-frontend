@@ -214,27 +214,65 @@ sans re-payer les anciens chunks.
 
 **Coût** : ~$0,10 pour 900 chunks (gpt-4o-mini). Durée : ~15-30 min selon rate limit.
 
-### Étape 2 — Lancer le fine-tuning
+### Étape 2 — Paraphraser les questions gold (recommandé)
+
+Pour éviter la **mémorisation lexicale** quand on upweight les paires gold (étape 3 ci-dessous),
+on diversifie le wording des questions ground-truth via paraphrasing LLM :
+
+```powershell
+.\.venv\Scripts\python.exe paraphrase_gold.py `
+  --paraphrases-per-question 10
+```
+
+**Mécanisme** :
+- Charge les paires gold (sample_queries.json + extra_training_examples.json)
+- Pour chaque question unique, demande 10 paraphrases à gpt-4o-mini (temperature 0.9 pour diversité)
+- Préserve les entités nommées (USV, MQ-9 Reaper, OSINT...)
+- Émet 1 entry par (paraphrase, paragraphe) → ~240 entries pour 5 questions gold × 10 paraphrases
+
+**Coût** : ~$0,001 par run complet (négligeable). Durée : ~1 min.
+
+Le résultat va dans `Experimental/DATA/gold_paraphrases.json`, format prêt pour `--gold-extra`.
+
+### Étape 3 — Lancer le fine-tuning
+
+**Commande complète avec toutes les protections** (paraphrases + upweight modéré + dropout) :
 
 ```powershell
 .\.venv\Scripts\python.exe finetune.py `
   --gold ..\Experimental\DATA\sample_queries.json `
-  --extra-examples ..\Experimental\DATA\extra_training_examples.json `
-                   ..\Experimental\DATA\synthetic_questions.json `
+  --gold-extra ..\Experimental\DATA\extra_training_examples.json `
+               ..\Experimental\DATA\gold_paraphrases.json `
+  --extra-examples ..\Experimental\DATA\synthetic_questions.json `
   --output-dir models\e5-base-monamo-ft `
-  --epochs 3 --batch-size 8 --lr 2e-5 --val-ratio 0.2
+  --epochs 3 --batch-size 8 --lr 2e-5 --val-ratio 0.2 `
+  --gold-upweight 5 --question-dropout-gold 0.10
 ```
 
-**Hyperparams par défaut** :
+**Pourquoi cette combinaison de flags ?**
+
+Le déséquilibre brut est de 264 paires gold contre 1772 synthétiques (~1:7). Sans
+rééquilibrage, le modèle s'oriente vers le style synthétique uniforme et oublie le
+signal des vraies questions du challenge. Trois mécanismes empilés :
+
+| Mécanisme | Effet |
+|---|---|
+| **`paraphrase_gold.py`** (étape 2) | Démultiplie le ground truth en 10 reformulations → 264 paires « gold-like » au lieu de 24 |
+| **`--gold-upweight 5`** | Duplique × 5 les paires gold dans le **train** (split val préservé pour mesure honnête) → 1110 gold + 1416 synth = ratio ~1:1.3 |
+| **`--question-dropout-gold 0.10`** | À chaque epoch, droppe 10 % des mots des questions gold aléatoirement → empêche la mémorisation lexicale des paraphrases |
+
+**Hyperparams clés** :
 
 | Param | Défaut | Rôle |
 |---|---|---|
-| `--epochs 3` | 3 passages complets sur le training set | Au-delà, risque d'overfitting sur ~1800 paires |
+| `--epochs 3` | 3 passages complets sur le training set | Au-delà, risque d'overfitting sur ~2000 paires |
 | `--batch-size 8` | 8 paires par batch (CPU-friendly) | GPU : monter à 32-64 |
 | `--lr 2e-5` | Learning rate AdamW | Standard pour fine-tuning SentenceTransformers |
-| `--temperature 0.07` | Softmax sharpness | Plus bas = pénalise davantage les négatifs |
+| `--temperature 0.07` | Softmax sharpness InfoNCE | Plus bas = pénalise davantage les négatifs |
 | `--val-ratio 0.2` | 20 % des questions en validation | Détecter l'overfitting (val_loss qui remonte) |
-| `--seed 42` | Reproductibilité du split + shuffle | |
+| `--seed 42` | Reproductibilité complète (CPU + CUDA + cudnn deterministic) | |
+| `--gold-upweight 5` | Duplication des paires gold uniquement dans le train | Reco : 5 si paraphrases activées, 20-30 sans paraphrases |
+| `--question-dropout-gold 0.10` | Word-dropout aléatoire sur questions gold | 0 = off ; reco : 0.10-0.15 avec upweight ≥ 5 |
 
 **Optimisations automatiques** côté code :
 - `gradient_checkpointing_enable()` → ~30 % de VRAM en moins
@@ -267,7 +305,7 @@ Le final est dans `models/e5-base-monamo-ft/`. **Prends le `.best` pour la suite
 | GPU RTX 3060 (12 GB, batch 32) | ~15-20 min |
 | GPU A10 / A100 (batch 64) | ~5-10 min |
 
-### Étape 3 — Évaluer le gain
+### Étape 4 — Évaluer le gain
 
 1. **Re-pointer la config** vers le modèle fine-tuné. Dans `backend/.env` :
    ```

@@ -15,6 +15,7 @@ from rag.attribution import (
     Attributor,
     RetrievedChunkForAttribution,
 )
+from utils.carbon import CarbonTracker
 
 
 # Granularité interne (chunk) — utilisée pour bâtir le contexte LLM.
@@ -45,6 +46,7 @@ class RAGResponse:
     chunks: list[RetrievedChunk] = field(default_factory=list)
     parameters: dict[str, Any] = field(default_factory=dict)
     tokens_used: int = 0
+    carbon: dict[str, Any] = field(default_factory=dict)
 
 
 class RAGEngine:
@@ -291,35 +293,56 @@ class RAGEngine:
         - context_chunks : combien de chunks passer au LLM
         - retrieval_only : court-circuite l'appel LLM (utile pour évaluer le retrieval seul)
         """
-        k = top_k_chunks or (settings.RAG_TOP_K * 3)
-        chunks = self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
+        import torch
 
-        if not chunks:
-            return RAGResponse(
-                question=query,
-                answer="Aucun extrait pertinent trouvé dans la base documentaire.",
-                parameters=self._params_dict(k=k, top_n=top_n_pages),
-            )
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        tracker = CarbonTracker(label="rag_inference", device=device)
 
-        retrieved_pages = self.aggregate_to_pages(chunks, top_n=top_n_pages)
+        with tracker.measure():
+            k = top_k_chunks or (settings.RAG_TOP_K * 3)
+            chunks = self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
 
-        if retrieval_only:
-            return RAGResponse(
-                question=query,
-                answer="",
-                retrieved=retrieved_pages,
-                chunks=chunks,
-                parameters=self._params_dict(k=k, top_n=top_n_pages),
-            )
+            if not chunks:
+                tracker.log_summary()
+                return RAGResponse(
+                    question=query,
+                    answer="Aucun extrait pertinent trouvé dans la base documentaire.",
+                    parameters=self._params_dict(k=k, top_n=top_n_pages),
+                    carbon=tracker.metrics.to_dict(),
+                )
 
-        context = self._build_context(chunks, max_chunks=context_chunks)
-        prompt = self._build_prompt(query, context)
-        try:
-            answer_txt, tokens = self._call_llm(prompt)
-        except Exception as ex:
-            logger.exception(f"[RAG] Appel LLM échoué : {ex}")
-            answer_txt, tokens = "", 0
+            retrieved_pages = self.aggregate_to_pages(chunks, top_n=top_n_pages)
 
+            if retrieval_only:
+                tracker.log_summary()
+                return RAGResponse(
+                    question=query,
+                    answer="",
+                    retrieved=retrieved_pages,
+                    chunks=chunks,
+                    parameters=self._params_dict(k=k, top_n=top_n_pages),
+                    carbon=tracker.metrics.to_dict(),
+                )
+
+            context = self._build_context(chunks, max_chunks=context_chunks)
+            prompt = self._build_prompt(query, context)
+            input_tokens_estimate = len(self._SYSTEM_PROMPT) // 4 + len(prompt) // 4
+            try:
+                answer_txt, tokens = self._call_llm(prompt)
+                # On approxime input/output 50/50 si le provider ne sépare pas
+                output_tokens_estimate = max(0, tokens - input_tokens_estimate)
+                if output_tokens_estimate <= 0:
+                    input_tokens_estimate = tokens // 2
+                    output_tokens_estimate = tokens - input_tokens_estimate
+                tracker.add_llm_tokens(
+                    input_tokens=input_tokens_estimate,
+                    output_tokens=output_tokens_estimate,
+                )
+            except Exception as ex:
+                logger.exception(f"[RAG] Appel LLM échoué : {ex}")
+                answer_txt, tokens = "", 0
+
+        tracker.log_summary()
         return RAGResponse(
             question=query,
             answer=answer_txt,
@@ -327,6 +350,7 @@ class RAGEngine:
             chunks=chunks,
             parameters=self._params_dict(k=k, top_n=top_n_pages),
             tokens_used=tokens,
+            carbon=tracker.metrics.to_dict(),
         )
 
     def attribute(
@@ -335,17 +359,30 @@ class RAGEngine:
         answer: str,
         chunks: list[RetrievedChunk],
         threshold: float = 0.80,
-        topk_per_sentence: int = 1,
+        secondary_threshold: float = 0.85,
+        topk_per_sentence: int = 3,
+        entity_filter: bool = True,
+        entity_min_support_ratio: float = 0.5,
     ) -> list[AttributedSentence]:
         """
-        Tâche 2 du challenge : attribue chaque phrase de `answer` à un (doc, page)
-        en s'appuyant d'abord sur les citations `[doc.pdf p.N]` puis sur la
-        similarité embedding avec les `chunks` retrieved.
+        Tâche 2 du challenge : attribue chaque phrase de `answer` à un (doc, page).
+
+        Pipeline :
+          1. Markdown (titres, séparateurs) → `[]`
+          2. Filtre entité (acronymes/nombres/noms propres absents des chunks) → `[]`
+          3. Citations `[doc.pdf p.N]` → attribution directe, page résolue par sim si absente
+          4. Embedding similarity Top-K :
+             - top-1 retenu si sim ≥ threshold
+             - top-2, top-3 retenus si sim ≥ secondary_threshold (plus strict)
+             - sinon `[]`
         """
         attributor = Attributor(
             embedder=self.embedder,
             threshold=threshold,
+            secondary_threshold=secondary_threshold,
             topk_per_sentence=topk_per_sentence,
+            entity_filter=entity_filter,
+            entity_min_support_ratio=entity_min_support_ratio,
         )
         attribution_chunks = [
             RetrievedChunkForAttribution(

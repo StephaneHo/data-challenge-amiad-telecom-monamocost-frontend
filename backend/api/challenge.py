@@ -110,7 +110,10 @@ class ChallengeRunner:
         top_n_pages: int = 10,
         context_chunks: int = 10,
         attribution_threshold: float = 0.80,
-        attribution_topk: int = 1,
+        attribution_secondary_threshold: float = 0.85,
+        attribution_topk: int = 3,
+        attribution_entity_filter: bool = True,
+        attribution_entity_min_support_ratio: float = 0.5,
         retrieval_only: bool = False,
     ) -> None:
         self.session = session
@@ -119,7 +122,10 @@ class ChallengeRunner:
         self.top_n_pages = top_n_pages
         self.context_chunks = context_chunks
         self.attribution_threshold = attribution_threshold
+        self.attribution_secondary_threshold = attribution_secondary_threshold
         self.attribution_topk = attribution_topk
+        self.attribution_entity_filter = attribution_entity_filter
+        self.attribution_entity_min_support_ratio = attribution_entity_min_support_ratio
         self.retrieval_only = retrieval_only
 
     def _parameters(self) -> dict[str, Any]:
@@ -132,7 +138,10 @@ class ChallengeRunner:
             "llm_model": self.engine.llm_model,
             "temperature": settings.RAG_TEMPERATURE,
             "attribution_threshold": self.attribution_threshold,
+            "attribution_secondary_threshold": self.attribution_secondary_threshold,
             "attribution_topk_per_sentence": self.attribution_topk,
+            "attribution_entity_filter": self.attribution_entity_filter,
+            "attribution_entity_min_support_ratio": self.attribution_entity_min_support_ratio,
         }
 
     def _attributions_to_items(
@@ -187,7 +196,10 @@ class ChallengeRunner:
                     answer=resp.answer,
                     chunks=resp.chunks,
                     threshold=self.attribution_threshold,
+                    secondary_threshold=self.attribution_secondary_threshold,
                     topk_per_sentence=self.attribution_topk,
+                    entity_filter=self.attribution_entity_filter,
+                    entity_min_support_ratio=self.attribution_entity_min_support_ratio,
                 )
                 task2_results.append(
                     Task2Result(

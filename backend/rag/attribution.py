@@ -84,6 +84,61 @@ def _unmask_abbrev(text: str) -> str:
     return text.replace(_DOT_PLACEHOLDER, ".")
 
 
+# ───────────────── Extraction d'entités saillantes (sans spaCy) ────────────
+# Détecte les hallucinations en vérifiant qu'au moins une entité saillante de
+# la phrase apparaît dans les chunks retrieved.
+
+# Acronymes (USV, MQ-9, OSINT, NDCG) : 2+ chars MAJ + chiffres + tirets
+_RE_ACRONYM = re.compile(r"\b[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*\b")
+# Nombres avec espace ou unité (10 millions, 30 %, 2024)
+_RE_NUMBER = re.compile(r"\b\d[\d\s.,]*\b")
+# Noms propres : capitalisés ≥ 4 chars (Beehive, Reaper, Tracfin)
+_RE_CAPS_WORD = re.compile(r"\b[A-ZÀÁÂÄÆÇÉÈÊËÎÏÔÖŒÙÛÜŸ][\wàáâäæçéèêëîïôöœùûüÿ\-]{3,}\b")
+
+# Mots/lieux trop fréquents pour être discriminants
+_NER_STOPWORDS = {
+    "Royal", "Navy", "Cette", "Dans", "Ainsi", "Donc", "Mais", "Puis", "Alors",
+    "Cela", "Ceci", "Cet", "Notamment", "Toutefois", "Cependant", "Aussi",
+    "Ensuite", "Enfin", "Lorsque", "Bien", "Plus", "Tout", "Tous", "Toutes",
+    "Pour", "Avec", "Sans", "Selon", "Depuis", "Pendant", "Avant", "Après",
+    "Comment", "Quel", "Quels", "Quelle", "Quelles", "Quand", "Qui", "Quoi",
+    "France", "Europe", "Etat", "Etats", "Union", "Nations", "Tracfin",
+}
+
+
+def _extract_salient_entities(text: str) -> set[str]:
+    """Entités saillantes de la phrase (acronymes + nombres + noms propres), lowercase."""
+    out: set[str] = set()
+    for m in _RE_ACRONYM.finditer(text):
+        tok = m.group()
+        if len(tok) >= 2 and tok not in _NER_STOPWORDS:
+            out.add(tok.lower())
+    for m in _RE_NUMBER.finditer(text):
+        tok = m.group().strip().replace(" ", "")
+        if len(tok.replace(",", "").replace(".", "")) >= 2:
+            out.add(tok.lower())
+    for m in _RE_CAPS_WORD.finditer(text):
+        tok = m.group()
+        if tok in _NER_STOPWORDS:
+            continue
+        out.add(tok.lower())
+    return out
+
+
+def _entities_supported(
+    sentence_entities: set[str], chunks_text: str, min_support_ratio: float = 0.5
+) -> bool:
+    """
+    Vérifie qu'au moins `min_support_ratio` des entités de la phrase apparaissent
+    dans le texte concaténé des chunks. Si pas d'entités à vérifier → True.
+    """
+    if not sentence_entities:
+        return True
+    haystack = chunks_text.lower()
+    n_supported = sum(1 for e in sentence_entities if e in haystack)
+    return (n_supported / len(sentence_entities)) >= min_support_ratio
+
+
 def split_sentences(text: str) -> list[str]:
     """
     Segmente un texte (potentiellement multi-paragraphes) en phrases.
@@ -209,14 +264,29 @@ class Attributor:
         self,
         embedder: Optional[Embedder] = None,
         threshold: float = 0.80,
-        topk_per_sentence: int = 1,
+        secondary_threshold: float = 0.85,
+        topk_per_sentence: int = 3,
+        entity_filter: bool = True,
+        entity_min_support_ratio: float = 0.5,
     ) -> None:
+        """
+        Paramètres :
+        - threshold : sim minimum pour attribuer une phrase au top-1 chunk.
+        - secondary_threshold : sim minimum pour ajouter un 2e/3e attribution.
+          Doit être >= threshold (plus strict = moins de faux positifs).
+        - topk_per_sentence : max d'attributions par phrase (dédup par (doc, page)).
+        - entity_filter : si True, vérifie que les entités saillantes de la phrase
+          apparaissent dans les chunks retrieved ; sinon force `[]`.
+          Boost le rappel sur les `[]` (détection d'hallucinations type "Recon-ng").
+        - entity_min_support_ratio : fraction minimale d'entités phrase qui doivent
+          être présentes dans les chunks pour valider (1.0 = strict, 0.0 = off).
+        """
         self.embedder = embedder or Embedder()
         self.threshold = threshold
-        # Combien de chunks attribuer par phrase (1 = seul le meilleur).
-        # Le challenge accepte plusieurs sources par phrase ; 2 ou 3 augmente
-        # le rappel sans trop pénaliser la précision si le seuil est correct.
+        self.secondary_threshold = max(secondary_threshold, threshold)
         self.topk_per_sentence = topk_per_sentence
+        self.entity_filter = entity_filter
+        self.entity_min_support_ratio = entity_min_support_ratio
 
     def _is_markdown_line(self, text: str) -> bool:
         return bool(_MARKDOWN_LINE.match(text))
@@ -247,24 +317,36 @@ class Attributor:
     ) -> tuple[list[Attribution], Optional[float]]:
         if not chunks:
             return [], None
-        # On embed la phrase comme « query » et compare à des « passages ».
+        # Embed phrase (query:) vs chunks (passage:)
         q_vec = self.embedder.encode_query(sentence)
         c_vecs = self.embedder.encode_passages([c.content for c in chunks])
-        # Cosinus (vecteurs normalisés → produit scalaire)
         sims = [sum(a * b for a, b in zip(q_vec, cv)) for cv in c_vecs]
         ranked = sorted(zip(chunks, sims), key=lambda x: x[1], reverse=True)
-        best_sim = ranked[0][1] if ranked else None
-        if best_sim is None or best_sim < self.threshold:
+        if not ranked:
+            return [], None
+        best_chunk, best_sim = ranked[0]
+
+        # 1) Top-1 doit dépasser le seuil principal — sinon `[]`
+        if best_sim < self.threshold:
             return [], best_sim
-        # Sélectionne les topk_per_sentence chunks, dédoublonne par (doc, page)
+
+        # 2) Top-1 toujours retenu si > threshold
         seen: set[tuple[str, int]] = set()
         out: list[Attribution] = []
-        for chunk, _sim in ranked[: self.topk_per_sentence]:
+        key = (best_chunk.doc_name, best_chunk.page_number)
+        seen.add(key)
+        out.append(Attribution(doc_name=best_chunk.doc_name, page=best_chunk.page_number))
+
+        # 3) Top-2, top-3... uniquement si sim ≥ secondary_threshold (plus strict)
+        for chunk, sim in ranked[1 : self.topk_per_sentence]:
+            if sim < self.secondary_threshold:
+                break
             key = (chunk.doc_name, chunk.page_number)
             if key in seen:
                 continue
             seen.add(key)
             out.append(Attribution(doc_name=chunk.doc_name, page=chunk.page_number))
+
         return out, best_sim
 
     def attribute(
@@ -274,6 +356,8 @@ class Attributor:
         chunks: list[RetrievedChunkForAttribution],
     ) -> list[AttributedSentence]:
         sentences = split_sentences(answer)
+        # Texte concaténé des chunks pour le filtre entité (calculé une seule fois)
+        chunks_text = " ".join(c.content for c in chunks) if self.entity_filter else ""
         out: list[AttributedSentence] = []
         for i, sent in enumerate(sentences):
             sid = f"{qid}_s{i}"
@@ -283,6 +367,19 @@ class Attributor:
                     AttributedSentence(sid=sid, text=sent, sources=("markdown",))
                 )
                 continue
+            # 1bis. Filtre entité : si les entités saillantes de la phrase
+            # n'apparaissent pas dans les chunks → hallucination probable → []
+            if self.entity_filter:
+                sent_entities = _extract_salient_entities(sent)
+                if sent_entities and not _entities_supported(
+                    sent_entities, chunks_text, self.entity_min_support_ratio
+                ):
+                    out.append(
+                        AttributedSentence(
+                            sid=sid, text=sent, sources=("entity_mismatch",)
+                        )
+                    )
+                    continue
             # 2. Citation explicite — résout les pages absentes via similarité
             raw_cits = parse_citations(sent)
             if raw_cits:

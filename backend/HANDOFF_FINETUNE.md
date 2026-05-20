@@ -69,6 +69,8 @@ python finetune.py \
   --lr 2e-5 \
   --temperature 0.07 \
   --val-ratio 0.2 \
+  --gold-upweight 5 \
+  --question-dropout-gold 0.10 \
   --log-every 10
 ```
 
@@ -77,10 +79,16 @@ python finetune.py \
 | Param | Valeur | Justification |
 |---|---|---|
 | `--batch-size 32` | Plus de positifs partagés dans le batch = meilleur signal contrastif |
-| `--epochs 3` | Suffisant pour ~1800 paires sans overfitting |
+| `--epochs 3` | Suffisant pour ~2000 paires sans overfitting |
 | `--lr 2e-5` | Standard pour fine-tuning sentence-transformers |
 | `--temperature 0.07` | Hyperparam classique InfoNCE |
 | `--val-ratio 0.2` | 20% des questions en val (split stratifié par question) |
+| `--gold-upweight 5` | Compense le 1:7 gold/synth sans noyer le ground-truth. La duplication s'applique **uniquement au train** (val préservée) |
+| `--question-dropout-gold 0.10` | Word-dropout aléatoire sur questions gold (différent par epoch) → casse la mémorisation lexicale liée à l'upweight |
+
+> ℹ️ Le fichier `training_pairs_full.json` contient un champ `_is_gold` par entry, conservé
+> automatiquement à l'export. `load_extra_examples` le respecte → `--gold-upweight` cible
+> les bonnes paires (264 gold sur 2036 totales).
 
 Pour aller plus large :
 - Batch 64 si VRAM > 16 GB
@@ -92,8 +100,9 @@ Pour aller plus large :
 Le code (`pipeline/finetune.py`) détecte CUDA et active :
 - **Mixed precision fp16** (`torch.amp.autocast` + `GradScaler`)
 - **Gradient checkpointing** (économise ~30% VRAM)
+- **Full determinism CUDA** (`cuda.manual_seed_all` + `cudnn.deterministic`) → 2 runs avec même seed = mêmes résultats au bit près, au prix de ~5-15 % de vitesse. Permet de comparer des hyperparams entre eux.
 
-ETA approximatif sur GPU mid-range (RTX 3060 / A10) : **15-30 min** pour 3 epochs × 1800 paires.
+ETA approximatif sur GPU mid-range (RTX 3060 / A10) : **15-30 min** pour 3 epochs × 2500 paires (après upweight).
 
 ---
 
@@ -149,13 +158,20 @@ le meilleur checkpoint (val loss minimale).
 ]
 ```
 
-Composition (1796 paires totales) :
-- **23 paires** issues du gold `sample_queries.json` (Q1-Q4, 8 docs)
-- **1 paire** OSINT/SSL du target.txt (`guide_osint_infrastructure_v2.pdf`)
-- **1772 paires synthétiques** générées par gpt-4o-mini sur les chunks ingérés (2 questions par chunk)
+Composition (**2036 paires totales** — incluant les paraphrases LLM des gold) :
+- **23 paires** issues du gold `sample_queries.json` (Q1-Q4, 8 docs)  → `_is_gold: true`
+- **1 paire** OSINT/SSL du target.txt (`guide_osint_infrastructure_v2.pdf`) → `_is_gold: true`
+- **240 paires** paraphrases LLM des 5 questions gold ci-dessus (10 paraphrases × ~5 questions × ~5 paragraphes en moyenne) → `_is_gold: true`
+- **1772 paires synthétiques** générées par gpt-4o-mini sur les chunks ingérés → `_is_gold: false`
+
+**Total `_is_gold: true` = 264 paires** ; **synthétique = 1772**.
 
 La clé positive pour la loss contrastive multi-positifs est `(doc_name, page)` —
 toutes les questions pointant vers la même page sont considérées positives entre elles.
+
+> 🔑 Les paraphrases sont **essentielles** : sans elles, dupliquer 30x les 24 paires gold
+> originales ferait simplement *mémoriser* le wording, sans généraliser. Avec les paraphrases
+> + word dropout, le modèle voit ~250 formulations différentes pour les mêmes concepts.
 
 ---
 

@@ -43,19 +43,28 @@ from pipeline.finetune import (
 
 
 def _export_pairs(examples: list[TrainingExample], path: Path) -> None:
-    """Sérialise les paires d'entraînement en JSON autonome (sans dépendance DB)."""
+    """
+    Sérialise les paires d'entraînement en JSON autonome (sans dépendance DB).
+    Le flag `_is_gold` est conservé pour qu'un consommateur (collègue GPU) puisse
+    appliquer `--gold-upweight` correctement.
+    """
     rows = [
         {
             "question": ex.question,
             "paragraph": ex.paragraph,
             "doc_name": ex.doc_name,
             "page": ex.page_number,
+            "_is_gold": ex.is_gold,
         }
         for ex in examples
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
-    logger.info(f"[CLI] Export : {len(rows)} paires écrites dans {path}")
+    n_gold = sum(1 for ex in examples if ex.is_gold)
+    logger.info(
+        f"[CLI] Export : {len(rows)} paires écrites dans {path} "
+        f"({n_gold} gold, {len(rows) - n_gold} synth)"
+    )
 
 
 def main() -> int:
@@ -101,6 +110,32 @@ def main() -> int:
         "(ex: --extra-examples extra_training_examples.json synthetic_questions.json)",
     )
     parser.add_argument(
+        "--gold-extra",
+        type=Path,
+        nargs="+",
+        default=None,
+        help="Comme --extra-examples mais les paires sont marquées comme gold "
+        "(éligibles à --gold-upweight). Utile pour l'exemple OSINT du target.txt.",
+    )
+    parser.add_argument(
+        "--gold-upweight",
+        type=int,
+        default=1,
+        help="Duplique N fois les paires gold (--gold + --gold-extra) dans le train set, "
+        "APRÈS le split val. Compense le déséquilibre face aux paires synthétiques. "
+        "Reco : 5-10 avec paraphrases LLM activées (cf. paraphrase_gold.py), "
+        "ou 20-50 sans paraphrases (mais risque de mémorisation). "
+        "Défaut: 1 = pas d'upweight.",
+    )
+    parser.add_argument(
+        "--question-dropout-gold",
+        type=float,
+        default=0.0,
+        help="Probabilité [0..1] de drop d'un mot dans les questions gold à chaque "
+        "récupération d'item (différent par epoch). Casse la mémorisation lexicale "
+        "quand --gold-upweight > 1. Reco : 0.10-0.15. Défaut: 0 = pas de dropout.",
+    )
+    parser.add_argument(
         "--export-to",
         type=Path,
         default=None,
@@ -115,25 +150,27 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Cas autonome (sans DB) : juste --extra-examples, pas de --gold
-    if args.gold is None and args.extra_examples:
+    # Cas autonome (sans DB) : juste --extra-examples / --gold-extra, pas de --gold
+    if args.gold is None:
+        if not args.extra_examples and not args.gold_extra:
+            logger.error("[CLI] Il faut au moins --gold, --extra-examples ou --gold-extra.")
+            return 1
         examples: list[TrainingExample] = []
-        for extra_path in args.extra_examples:
-            examples.extend(load_extra_examples(extra_path))
+        for p in args.gold_extra or []:
+            examples.extend(load_extra_examples(p, is_gold=True))
+        for p in args.extra_examples or []:
+            examples.extend(load_extra_examples(p, is_gold=False))
         if not examples:
             logger.error("[CLI] Aucune paire construite depuis les --extra-examples.")
             return 1
         return _run_after_load(args, examples)
 
-    if args.gold is None:
-        logger.error("[CLI] Il faut au moins --gold ou --extra-examples.")
-        return 1
-
     with get_session() as session:
         examples = build_training_pairs(session, args.gold)
-        if args.extra_examples:
-            for extra_path in args.extra_examples:
-                examples.extend(load_extra_examples(extra_path))
+        for p in args.gold_extra or []:
+            examples.extend(load_extra_examples(p, is_gold=True))
+        for p in args.extra_examples or []:
+            examples.extend(load_extra_examples(p, is_gold=False))
         if not examples:
             logger.error("[CLI] Aucune paire construite — vérifier que le corpus est ingéré.")
             return 1
@@ -147,6 +184,18 @@ def _run_after_load(args: argparse.Namespace, examples: list[TrainingExample]) -
         return 0
 
     train, val = train_val_split(examples, val_ratio=args.val_ratio, seed=args.seed)
+
+    # Gold upweighting : amplifie les paires ground-truth dans le train uniquement.
+    # Préserve une val "naturelle" (sans duplication) pour une mesure honnête.
+    if args.gold_upweight > 1:
+        gold_train = [ex for ex in train if ex.is_gold]
+        other_train = [ex for ex in train if not ex.is_gold]
+        train = other_train + gold_train * args.gold_upweight
+        logger.info(
+            f"[CLI] Gold upweight ×{args.gold_upweight} : "
+            f"{len(gold_train)} paires gold → {len(gold_train) * args.gold_upweight} "
+            f"dans le train (total train = {len(train)})"
+        )
 
     if args.dry_run:
         logger.info(f"[CLI] Dry-run : {len(train)} train / {len(val)} val. Aperçu :")
@@ -167,6 +216,7 @@ def _run_after_load(args: argparse.Namespace, examples: list[TrainingExample]) -
         val_ratio=args.val_ratio,
         seed=args.seed,
         log_every=args.log_every,
+        question_dropout_gold=args.question_dropout_gold,
     )
     fine_tune(train_examples=train, val_examples=val if val else None, config=cfg)
     return 0

@@ -45,6 +45,7 @@ class TrainingExample:
     paragraph: str
     doc_name: str
     page_number: int
+    is_gold: bool = False  # True = ground truth (sample_queries, OSINT) ; False = synthétique
 
     @property
     def positive_key(self) -> tuple[str, int]:
@@ -62,9 +63,9 @@ def _resolve_doc_alias(name: str) -> str:
     return _DOC_ALIAS.get(name, name)
 
 
-def load_extra_examples(extra_path: Path) -> list[TrainingExample]:
+def load_extra_examples(extra_path: Path, is_gold: bool = False) -> list[TrainingExample]:
     """
-    Charge des paires synthétiques depuis un fichier JSON, format :
+    Charge des paires depuis un fichier JSON, format :
         [
           {
             "question": "...",
@@ -75,21 +76,32 @@ def load_extra_examples(extra_path: Path) -> list[TrainingExample]:
           ...
         ]
 
-    Utile pour des exemples comme l'OSINT/SSL du target.txt dont le contenu est
-    fourni inline mais qui ne sont pas dans le corpus indexé.
+    `is_gold=True` à passer si le fichier contient des paires ground-truth
+    (ex: extra_training_examples.json avec l'OSINT du target.txt) pour qu'elles
+    soient éligibles à `--gold-upweight`.
     """
     data = json.loads(Path(extra_path).read_text(encoding="utf-8"))
     out: list[TrainingExample] = []
+    n_gold = 0
     for it in data:
+        # `_is_gold` dans le fichier prime sur l'argument (utile pour les exports
+        # de training_set produits par `finetune.py --export-to`).
+        per_item_gold = it.get("_is_gold", is_gold)
+        if per_item_gold:
+            n_gold += 1
         out.append(
             TrainingExample(
                 question=it["question"],
                 paragraph=it["paragraph"],
                 doc_name=it["doc_name"],
                 page_number=int(it.get("page", 1)),
+                is_gold=per_item_gold,
             )
         )
-    logger.info(f"[Finetune] {len(out)} paires extra depuis {extra_path.name}")
+    logger.info(
+        f"[Finetune] {len(out)} paires depuis {extra_path.name} "
+        f"({n_gold} gold, {len(out) - n_gold} synth)"
+    )
     return out
 
 
@@ -136,6 +148,7 @@ def build_training_pairs(
                         paragraph=c.content,
                         doc_name=doc,
                         page_number=page,
+                        is_gold=True,
                     )
                 )
 
@@ -176,26 +189,50 @@ def train_val_split(
 
 # ──────────────────────────── Dataset & loss ───────────────────────────────
 
+def _word_dropout(text: str, p: float) -> str:
+    """Droppe aléatoirement chaque mot avec probabilité p. Préserve l'ordre et la casse."""
+    if p <= 0:
+        return text
+    tokens = text.split()
+    if len(tokens) <= 3:
+        return text  # trop court → pas touché
+    kept = [t for t in tokens if random.random() > p]
+    if not kept:
+        kept = [tokens[0]]  # garantit qu'on ne renvoie pas une question vide
+    return " ".join(kept)
+
+
 class MultiPositiveDataset(Dataset):
     """
     Dataset PyTorch — applique la convention de préfixes e5 :
     - questions → `query: ...`
     - paragraphes → `passage: ...`
+
+    Si `question_dropout_gold > 0`, applique un word-dropout aléatoire aux questions
+    des exemples taggés `is_gold=True` (différent à chaque epoch). Casse la
+    mémorisation lexicale lors de l'upweight des gold.
     """
 
-    def __init__(self, examples: list[TrainingExample]) -> None:
-        self.questions = [f"query: {ex.question}" for ex in examples]
-        self.paragraphs = [f"passage: {ex.paragraph}" for ex in examples]
-        self.keys = [ex.positive_key for ex in examples]
+    def __init__(
+        self,
+        examples: list[TrainingExample],
+        question_dropout_gold: float = 0.0,
+    ) -> None:
+        self.examples = examples
+        self.question_dropout_gold = question_dropout_gold
 
     def __len__(self) -> int:
-        return len(self.questions)
+        return len(self.examples)
 
     def __getitem__(self, idx: int) -> dict:
+        ex = self.examples[idx]
+        question = ex.question
+        if ex.is_gold and self.question_dropout_gold > 0:
+            question = _word_dropout(question, self.question_dropout_gold)
         return {
-            "question": self.questions[idx],
-            "paragraph": self.paragraphs[idx],
-            "key": self.keys[idx],
+            "question": f"query: {question}",
+            "paragraph": f"passage: {ex.paragraph}",
+            "key": ex.positive_key,
         }
 
 
@@ -264,6 +301,7 @@ class FineTuneConfig:
     seed: int = 42
     gradient_checkpointing: bool = True
     log_every: int = 5  # log toutes les N steps
+    question_dropout_gold: float = 0.0  # word dropout sur questions gold (0=off)
 
 
 def _evaluate(
@@ -294,8 +332,11 @@ def fine_tune(
     Lance le fine-tuning. Sauvegarde le best model (val loss) dans `config.output_dir`.
     Retourne le modèle final chargé.
     """
+    from utils.carbon import CarbonTracker
+
     cfg = config or FineTuneConfig()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tracker = CarbonTracker(label="finetune", device=device.type)
     logger.info(
         f"[Finetune] device={device} | model={cfg.model_name} | "
         f"epochs={cfg.epochs} bs={cfg.batch_size} lr={cfg.lr} temp={cfg.temperature}"
@@ -306,9 +347,16 @@ def fine_tune(
             f"VRAM={torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB"
         )
 
-    # Reproductibilité
+    # Reproductibilité (CPU + CUDA)
     torch.manual_seed(cfg.seed)
     random.seed(cfg.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(cfg.seed)
+        # cudnn deterministic : reproductibilité au prix de ~5-15% de vitesse.
+        # Acceptable pour ce projet (on veut comparer des hyperparams entre eux).
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        logger.info("[Finetune] CUDA full determinism activé (cudnn.deterministic=True)")
 
     model = SentenceTransformer(cfg.model_name).to(device)
     if cfg.gradient_checkpointing:
@@ -316,7 +364,7 @@ def fine_tune(
         logger.info("[Finetune] Gradient checkpointing : activé")
 
     train_loader = DataLoader(
-        MultiPositiveDataset(train_examples),
+        MultiPositiveDataset(train_examples, question_dropout_gold=cfg.question_dropout_gold),
         batch_size=cfg.batch_size,
         shuffle=True,
         collate_fn=collate_fn,
@@ -324,8 +372,9 @@ def fine_tune(
     )
     val_loader: Optional[DataLoader] = None
     if val_examples:
+        # Pas de dropout côté val : on veut une mesure honnête de la loss
         val_loader = DataLoader(
-            MultiPositiveDataset(val_examples),
+            MultiPositiveDataset(val_examples, question_dropout_gold=0.0),
             batch_size=cfg.batch_size,
             shuffle=False,
             collate_fn=collate_fn,
@@ -343,6 +392,9 @@ def fine_tune(
     cfg.output_dir = Path(cfg.output_dir)
     cfg.output_dir.parent.mkdir(parents=True, exist_ok=True)
 
+    import time as _time
+
+    train_t0 = _time.monotonic()
     for epoch in range(1, cfg.epochs + 1):
         model.train()
         total_loss = 0.0
@@ -379,9 +431,17 @@ def fine_tune(
                 msg += " ✓ best"
         logger.info(msg)
 
-    # Toujours sauver le final
+    tracker.metrics.runtime_seconds += _time.monotonic() - train_t0
+
+    # Toujours sauver le final + métriques carbone
     _save_model(model, cfg.output_dir, suffix="")
+    tracker.log_summary()
+    _carbon_path = cfg.output_dir / "carbon_metrics.json"
+    import json as _json
+
+    _carbon_path.write_text(_json.dumps(tracker.metrics.to_dict(), indent=2), encoding="utf-8")
     logger.info(f"[Finetune] Modèle sauvegardé : {cfg.output_dir.resolve()}")
+    logger.info(f"[Finetune] Métriques carbone : {_carbon_path}")
     return model
 
 
