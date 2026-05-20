@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from pipeline.embedder import Embedder
+from pipeline.query_decomposition import QueryDecomposer
 from rag.attribution import (
     AttributedSentence,
     Attributor,
@@ -128,6 +129,7 @@ class RAGEngine:
         self.llm_provider = (llm_provider or settings.LLM_PROVIDER).lower()
         self.llm_model = llm_model or settings.LLM_MODEL
         self._llm_client: Any = None  # initialisé paresseusement
+        self._decomposer: Optional[QueryDecomposer] = None
 
     def _build_llm(self) -> Any:
         if self._llm_client is not None:
@@ -145,6 +147,37 @@ class RAGEngine:
         return self._llm_client
 
     # ──────────────────────── Retrieval ────────────────────────
+
+    def retrieve_chunks_decomposed(
+        self,
+        query: str,
+        k: int = 30,
+        per_subquery_k: int = 20,
+        doc_filter: Optional[list[str]] = None,
+    ) -> list[RetrievedChunk]:
+        """
+        Retrieval avec décomposition de la question multi-hop.
+          1. Décompose la question en N sous-questions (1 si déjà atomique)
+          2. Pour chaque sous-question, retrieve `per_subquery_k` chunks
+          3. Fusionne en gardant le meilleur score par (doc, page, chunk_index)
+          4. Trie par score, garde le top `k`
+        """
+        if self._decomposer is None:
+            self._decomposer = QueryDecomposer()
+        decomp = self._decomposer.decompose(query)
+        if decomp.is_atomic:
+            return self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
+
+        # Fusion : on indexe par (doc, page, chunk_index) et on garde le meilleur score
+        best: dict[tuple[str, int, int], RetrievedChunk] = {}
+        for subq in decomp.subqueries:
+            for c in self.retrieve_chunks(subq, k=per_subquery_k, doc_filter=doc_filter):
+                key = (c.doc_name, c.page_number, c.chunk_index)
+                cur = best.get(key)
+                if cur is None or c.score > cur.score:
+                    best[key] = c
+        ranked = sorted(best.values(), key=lambda c: c.score, reverse=True)
+        return ranked[:k]
 
     def retrieve_chunks(
         self,
@@ -283,6 +316,7 @@ class RAGEngine:
         context_chunks: int = 12,
         doc_filter: Optional[list[str]] = None,
         retrieval_only: bool = False,
+        decompose: bool = False,
     ) -> RAGResponse:
         """
         Pipeline complet : retrieval → agrégation pages → génération.
@@ -300,7 +334,10 @@ class RAGEngine:
 
         with tracker.measure():
             k = top_k_chunks or (settings.RAG_TOP_K * 3)
-            chunks = self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
+            if decompose:
+                chunks = self.retrieve_chunks_decomposed(query, k=k, doc_filter=doc_filter)
+            else:
+                chunks = self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
 
             if not chunks:
                 tracker.log_summary()

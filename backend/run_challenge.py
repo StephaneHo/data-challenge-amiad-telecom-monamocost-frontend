@@ -7,6 +7,10 @@ Usage :
     python run_challenge.py --input questions.json --out-task1 t1.json --out-task2 t2.json
     python run_challenge.py --input questions.json --no-task2 --retrieval-only
     python run_challenge.py --input questions.json --filter-qids Q1,Q4
+
+    # Tâche 2 standalone : prend un JSON Task 1 (le nôtre OU celui des organisateurs)
+    # et produit uniquement les attributions Task 2, sans regénérer la réponse.
+    python run_challenge.py --task2-from external_task1.json --out-task2 my_task2.json
 """
 
 from __future__ import annotations
@@ -24,7 +28,19 @@ from database.db import get_session
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Runner challenge EvalLLM 2026")
-    parser.add_argument("--input", type=Path, required=True, help="JSON input (questions)")
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=None,
+        help="JSON input (questions). Requis sauf si --task2-from est utilisé.",
+    )
+    parser.add_argument(
+        "--task2-from",
+        type=Path,
+        default=None,
+        help="JSON au format Task 1 output (question + retrieved + answer) à attribuer "
+        "phrase par phrase. Mode standalone : ne regénère pas la réponse.",
+    )
     parser.add_argument(
         "--out-task1",
         type=Path,
@@ -39,6 +55,13 @@ def main() -> int:
     )
     parser.add_argument("--no-task2", action="store_true", help="Skip l'attribution (Tâche 2)")
     parser.add_argument("--retrieval-only", action="store_true", help="Skip l'appel LLM")
+    parser.add_argument(
+        "--decompose",
+        action="store_true",
+        help="Active la décomposition de question multi-hop via LLM (chantier 1). "
+        "Pour chaque question, génère 1-4 sous-questions, retrieve chacune, fusionne. "
+        "Améliore le rappel sur les questions complexes type Q3 du sample.",
+    )
     parser.add_argument("--top-k-chunks", type=int, default=20)
     parser.add_argument("--top-n-pages", type=int, default=10)
     parser.add_argument("--context-chunks", type=int, default=10)
@@ -50,6 +73,30 @@ def main() -> int:
         help="Liste de qids séparés par des virgules (ex: 'Q1,Q4') — restreint à ces questions",
     )
     args = parser.parse_args()
+
+    # Mode standalone Task 2 : ne nécessite pas --input
+    if args.task2_from is not None:
+        external = json.loads(args.task2_from.read_text(encoding="utf-8"))
+        with get_session() as session:
+            runner = ChallengeRunner(
+                session=session,
+                top_k_chunks=args.top_k_chunks,
+                top_n_pages=args.top_n_pages,
+                context_chunks=args.context_chunks,
+                attribution_threshold=args.attribution_threshold,
+            )
+            task2 = runner.run_task2_standalone(external)
+        out_task2 = args.out_task2 or args.task2_from.parent / f"{args.task2_from.stem}_task2.json"
+        out_task2.write_text(
+            json.dumps(task2.model_dump(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.info(f"[CLI] Tâche 2 (standalone) écrite : {out_task2}")
+        return 0
+
+    if args.input is None:
+        logger.error("[CLI] --input requis sauf si --task2-from est fourni.")
+        return 1
 
     raw = json.loads(args.input.read_text(encoding="utf-8"))
     payload = ChallengeInput.model_validate(raw)
@@ -71,6 +118,7 @@ def main() -> int:
             context_chunks=args.context_chunks,
             attribution_threshold=args.attribution_threshold,
             retrieval_only=args.retrieval_only,
+            decompose=args.decompose,
         )
         out = runner.run(payload, with_task2=not args.no_task2)
 

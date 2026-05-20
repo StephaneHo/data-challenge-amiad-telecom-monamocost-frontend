@@ -115,6 +115,7 @@ class ChallengeRunner:
         attribution_entity_filter: bool = True,
         attribution_entity_min_support_ratio: float = 0.5,
         retrieval_only: bool = False,
+        decompose: bool = False,
     ) -> None:
         self.session = session
         self.engine = engine or RAGEngine(session=session)
@@ -127,6 +128,7 @@ class ChallengeRunner:
         self.attribution_entity_filter = attribution_entity_filter
         self.attribution_entity_min_support_ratio = attribution_entity_min_support_ratio
         self.retrieval_only = retrieval_only
+        self.decompose = decompose
 
     def _parameters(self) -> dict[str, Any]:
         return {
@@ -142,6 +144,7 @@ class ChallengeRunner:
             "attribution_topk_per_sentence": self.attribution_topk,
             "attribution_entity_filter": self.attribution_entity_filter,
             "attribution_entity_min_support_ratio": self.attribution_entity_min_support_ratio,
+            "decompose_queries": self.decompose,
         }
 
     def _attributions_to_items(
@@ -175,6 +178,7 @@ class ChallengeRunner:
                 top_n_pages=self.top_n_pages,
                 context_chunks=self.context_chunks,
                 retrieval_only=self.retrieval_only,
+                decompose=self.decompose,
             )
 
             task1_results.append(
@@ -191,10 +195,19 @@ class ChallengeRunner:
             )
 
             if with_task2 and resp.answer and resp.chunks:
+                # Conformité Task 2 : les chunks utilisés pour l'attribution doivent
+                # appartenir aux pages déclarées dans `retrieved` du Task 1 output.
+                # Cf. règlement « Les documents et les chunks récupérés sont
+                # identiques à ceux utilisés pour la Tâche 1 ».
+                declared_pages = {(r.doc_name, r.page) for r in resp.retrieved}
+                attribution_chunks = [
+                    c for c in resp.chunks
+                    if (c.doc_name, c.page_number) in declared_pages
+                ]
                 sentences = self.engine.attribute(
                     qid=q.qid,
                     answer=resp.answer,
-                    chunks=resp.chunks,
+                    chunks=attribution_chunks,
                     threshold=self.attribution_threshold,
                     secondary_threshold=self.attribution_secondary_threshold,
                     topk_per_sentence=self.attribution_topk,
@@ -218,3 +231,79 @@ class ChallengeRunner:
             else None
         )
         return ChallengeOutput(task1=task1_run, task2=task2_run)
+
+    def run_task2_standalone(self, task1_payload: dict) -> Task2Run:
+        """
+        Tâche 2 en mode standalone : prend un JSON Task 1 (le nôtre ou celui d'un tiers)
+        avec `results[].{question, retrieved, answer}` et produit les attributions phrase
+        par phrase, sans regénérer la réponse.
+
+        Conforme au règlement : « À partir d'une question, des morceaux de documents
+        récupérés et d'une réponse donnée, les participants doivent produire pour chaque
+        segment de la réponse sa référence documentaire ».
+
+        Les contenus textuels des chunks sont récupérés depuis la DB via les
+        (doc_name, page) déclarés dans `retrieved` (= chunks de Task 1).
+        """
+        from database.models import Chunk
+        from rag.rag_engine import RetrievedChunk
+        from sqlalchemy import select
+
+        run_id = task1_payload.get("run_id", "task2-standalone")
+        params = self._parameters()
+        params["mode"] = "task2_standalone"
+        results: list[Task2Result] = []
+
+        for q in task1_payload.get("results", []):
+            qid = q["qid"]
+            answer = q.get("answer", "")
+            retrieved = q.get("retrieved", [])
+            if not answer or not retrieved:
+                results.append(Task2Result(qid=qid, attributions=[]))
+                continue
+
+            # Charge les chunks réels en DB pour les pages déclarées dans `retrieved`
+            chunks: list[RetrievedChunk] = []
+            for r in retrieved:
+                stmt = (
+                    select(Chunk)
+                    .where(Chunk.doc_name == r["doc_name"])
+                    .where(Chunk.page_number == r["page"])
+                    .order_by(Chunk.chunk_index)
+                )
+                for c in self.session.execute(stmt).scalars():
+                    chunks.append(
+                        RetrievedChunk(
+                            doc_name=c.doc_name,
+                            page_number=c.page_number,
+                            chunk_index=c.chunk_index,
+                            content=c.content,
+                            score=1.0,  # score factice : on n'a pas le score original
+                        )
+                    )
+
+            if not chunks:
+                logger.warning(
+                    f"[Challenge T2-standalone] {qid} : aucun chunk trouvé en DB "
+                    "pour les pages déclarées"
+                )
+                results.append(Task2Result(qid=qid, attributions=[]))
+                continue
+
+            sentences = self.engine.attribute(
+                qid=qid,
+                answer=answer,
+                chunks=chunks,
+                threshold=self.attribution_threshold,
+                secondary_threshold=self.attribution_secondary_threshold,
+                topk_per_sentence=self.attribution_topk,
+                entity_filter=self.attribution_entity_filter,
+                entity_min_support_ratio=self.attribution_entity_min_support_ratio,
+            )
+            results.append(
+                Task2Result(
+                    qid=qid, attributions=self._attributions_to_items(sentences)
+                )
+            )
+
+        return Task2Run(run_id=run_id, parameters=params, results=results)
