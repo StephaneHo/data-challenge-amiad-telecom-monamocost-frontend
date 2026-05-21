@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # RAG
     RAG_TOP_K: int = 15
     RAG_TEMPERATURE: float = 0.2
+    # Mode de retrieval : "dense" (e5 cosinus), "bm25" (Postgres ts_rank), "hybrid" (RRF fusion).
+    # Hybride améliore les questions contenant des entités exactes rares
+    # (acronymes, codes, noms propres) que le dense pur peut manquer.
+    RETRIEVAL_MODE: str = "hybrid"
 
     # LLM
     OPENAI_API_KEY: str = ""

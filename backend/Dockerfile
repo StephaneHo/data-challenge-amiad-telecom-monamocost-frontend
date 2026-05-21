@@ -1,38 +1,57 @@
-FROM python:3.11-slim
+# Image backend Mon Amo Cost — pipeline RAG EvalLLM 2026
+# Inclut tout ce qu'il faut pour reproduire l'expérience sans installation locale :
+# Python 3.11, deps uv, Tesseract OCR (fra+eng), Poppler, et le code applicatif.
 
-# Installation des outils système
+FROM python:3.11-slim AS base
+
+# ─────────────────── Outils système ───────────────────
+# - tesseract-ocr-fra : pour l'OCR en français des PDFs scannés
+# - poppler-utils : pour la conversion PDF→image (pdf2image)
+# - libpq-dev : pour psycopg2 / pgvector
+# - curl, git : utilitaires divers
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl wget git bash \
+    curl \
+    git \
+    bash \
+    libpq-dev \
+    tesseract-ocr \
+    tesseract-ocr-fra \
+    tesseract-ocr-eng \
+    poppler-utils \
     && curl -sSL https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh \
        -o /usr/local/bin/wait-for-it \
     && chmod +x /usr/local/bin/wait-for-it \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Installation de uv
+# ─────────────────── uv (gestionnaire deps) ───────────────────
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Ajout de uv au Path
 ENV PATH="/root/.local/bin:$PATH"
 
-# Dossier de travail
 WORKDIR /app
 
-# Copie des fichiers de dépendances 
+# ─────────────────── Deps Python (cache layer) ───────────────────
+# On copie d'abord uniquement les fichiers de deps pour bénéficier du cache Docker
 COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-dev || uv sync
 
-# Installation des dépendances via uv
-RUN uv sync --frozen || uv pip install
-
+# ─────────────────── Code applicatif ───────────────────
 COPY . .
 
-# wait-for-it pour PostgreSQL
-RUN curl -sSL https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh \
-    -o /usr/local/bin/wait-for-it \
-    && chmod +x /usr/local/bin/wait-for-it
+# Le code ingère les PDFs depuis ../Experimental/DATA/Corpus_raw — monté en volume
+# en runtime via docker-compose (non baked dans l'image, conformément au règlement
+# qui interdit la redistribution du corpus).
 
-#  entrypoint
 RUN chmod +x entrypoint.sh
+
+# ─────────────────── Variables d'environnement par défaut ───────────────────
+# Sur Linux/Docker, Tesseract et Poppler sont dans le PATH par défaut.
+# On surcharge donc les paths Windows héritées de .env.
+ENV TESSERACT_CMD="" \
+    TESSDATA_DIR="" \
+    POPPLER_PATH="" \
+    OCR_LANG="fra" \
+    HF_HUB_OFFLINE="0"
 
 EXPOSE 8000
 
-ENTRYPOINT [ "./entrypoint.sh" ]
+ENTRYPOINT ["./entrypoint.sh"]

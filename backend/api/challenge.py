@@ -116,6 +116,7 @@ class ChallengeRunner:
         attribution_entity_min_support_ratio: float = 0.5,
         retrieval_only: bool = False,
         decompose: bool = False,
+        retrieval_mode: Optional[str] = None,
     ) -> None:
         self.session = session
         self.engine = engine or RAGEngine(session=session)
@@ -129,6 +130,7 @@ class ChallengeRunner:
         self.attribution_entity_min_support_ratio = attribution_entity_min_support_ratio
         self.retrieval_only = retrieval_only
         self.decompose = decompose
+        self.retrieval_mode = retrieval_mode or settings.RETRIEVAL_MODE
 
     def _parameters(self) -> dict[str, Any]:
         return {
@@ -145,6 +147,7 @@ class ChallengeRunner:
             "attribution_entity_filter": self.attribution_entity_filter,
             "attribution_entity_min_support_ratio": self.attribution_entity_min_support_ratio,
             "decompose_queries": self.decompose,
+            "retrieval_mode": self.retrieval_mode,
         }
 
     def _attributions_to_items(
@@ -182,6 +185,7 @@ class ChallengeRunner:
                 context_chunks=self.context_chunks,
                 retrieval_only=self.retrieval_only,
                 decompose=self.decompose,
+                retrieval_mode=self.retrieval_mode,
             )
 
             task1_results.append(

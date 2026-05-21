@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# backend/entrypoint.sh
-
-# si une commande échoue, stoppe immédiatement
+# backend/entrypoint.sh — démarrage du conteneur backend
 set -e
 
-# On attend POSTGRES
-echo "[entrypoint] On attend que PostgreSQL soit prete"
+echo "[entrypoint] Attente que PostgreSQL soit prêt..."
 wait-for-it db:5432 --timeout=60 --strict -- echo "[entrypoint] PostgreSQL disponible"
 
-echo "[entrypoint] On lance les migrations Alambic"
-alembic upgread head
+echo "[entrypoint] Application des migrations Alembic..."
+uv run alembic upgrade head
 
-echo "[entrypoint] On démarre l'API FASTAPI"
-exec uvicorn api.app:app \
+echo "[entrypoint] Démarrage de l'API FastAPI sur :8000"
+exec uv run uvicorn api.app:app \
   --host 0.0.0.0 \
   --port 8000 \
-  --reload \
   --log-level info
-

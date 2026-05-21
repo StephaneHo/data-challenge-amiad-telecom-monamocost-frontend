@@ -1,10 +1,8 @@
-
-
 services:
 
-  # -------------------------
-  # Base de données PostgreSQL + pgvector
-  # -------------------------
+  # -------------------------------------------------------------------
+  # PostgreSQL + pgvector
+  # -------------------------------------------------------------------
   db:
     image: pgvector/pgvector:pg16
     container_name: postgres-rag
@@ -26,55 +24,37 @@ services:
     networks:
       - am-net
 
-  # -------------------------
-  # Redis
-  # -------------------------
-  redis:
-    image: redis:7-alpine
-    container_name: redis-am
-    restart: always
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    networks:
-      - am-net
-
-  # -------------------------
-  # Backend (FastAPI)
-  # -------------------------
+  # -------------------------------------------------------------------
+  # Backend FastAPI + pipeline RAG
+  # -------------------------------------------------------------------
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: am-backend
     restart: unless-stopped
-    env_file: .env
+    env_file: backend/.env
     environment:
+      # Override les paths OCR Windows en valeurs Linux/Docker valides
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/am-rag
-      REDIS_URL: redis://redis:6379/0
+      TESSERACT_CMD: ""
+      TESSDATA_DIR: ""
+      POPPLER_PATH: ""
+      OCR_LANG: fra
+    volumes:
+      # Monte le corpus + données en read-only pour ingestion et runs
+      - ./Experimental:/app/../Experimental:ro
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - am-net
 
-# -------------------------
-# Volumes
-# -------------------------
 volumes:
   postgres_data:
 
-# -------------------------
-# Réseau
-# -------------------------
 networks:
   am-net:
     driver: bridge

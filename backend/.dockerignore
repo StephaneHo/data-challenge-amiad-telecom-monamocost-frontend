@@ -1,0 +1,47 @@
+# Exclusions du build context Docker — réduit la taille de l'image et accélère les builds.
+
+# Virtualenv local (Windows/Linux) — sera reconstruit dans l'image via uv sync
+.venv/
+venv/
+env/
+
+# Caches Python / Jupyter
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Modèles fine-tunés + caches HuggingFace locaux — pesants, à monter en volume au runtime
+models/
+.cache/
+~/.cache/
+
+# Données du challenge — montées en volume au runtime (cf. docker-compose)
+# Le Dockerfile ne doit JAMAIS embarquer le corpus PDF (non-redistribuable).
+../Experimental/DATA/Corpus_raw/
+../Experimental/DATA/training/*.json
+../Experimental/DATA/runs/*.json
+
+# Logs et fichiers temp
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Configuration locale (le runtime utilise env_file via compose)
+.env
+.env.local
+
+# Git
+.git/
+.gitignore
+
+# Docs (pas nécessaires pour l'image runtime)
+*.md
+docs/
+
+# Notebooks d'exploration
+*.ipynb

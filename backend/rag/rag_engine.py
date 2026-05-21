@@ -167,13 +167,14 @@ class RAGEngine:
         if self._decomposer is None:
             self._decomposer = QueryDecomposer()
         decomp = self._decomposer.decompose(query)
+        mode = settings.RETRIEVAL_MODE
         if decomp.is_atomic:
-            return self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
+            return self.retrieve_chunks(query, k=k, doc_filter=doc_filter, mode=mode)
 
         # Fusion : on indexe par (doc, page, chunk_index) et on garde le meilleur score
         best: dict[tuple[str, int, int], RetrievedChunk] = {}
         for subq in decomp.subqueries:
-            for c in self.retrieve_chunks(subq, k=per_subquery_k, doc_filter=doc_filter):
+            for c in self.retrieve_chunks(subq, k=per_subquery_k, doc_filter=doc_filter, mode=mode):
                 key = (c.doc_name, c.page_number, c.chunk_index)
                 cur = best.get(key)
                 if cur is None or c.score > cur.score:
@@ -186,22 +187,38 @@ class RAGEngine:
         query: str,
         k: int = 30,
         doc_filter: Optional[list[str]] = None,
+        mode: Optional[str] = None,
     ) -> list[RetrievedChunk]:
-        """Top-K chunks par similarité cosinus dans pgvector."""
-        qv = self.embedder.encode_query(query)
+        """
+        Top-K chunks par mode de retrieval.
+        - `mode="dense"` (défaut config) : cosinus pgvector via e5
+        - `mode="bm25"` : BM25-like via Postgres ts_rank sur `content_tsv` français
+        - `mode="hybrid"` : fusion RRF des deux (Reciprocal Rank Fusion, k=60)
+        """
+        mode = (mode or settings.RETRIEVAL_MODE).lower()
+        if mode == "dense":
+            return self._retrieve_dense(query, k=k, doc_filter=doc_filter)
+        if mode == "bm25":
+            return self._retrieve_bm25(query, k=k, doc_filter=doc_filter)
+        if mode == "hybrid":
+            return self._retrieve_hybrid(query, k=k, doc_filter=doc_filter)
+        raise ValueError(f"Mode de retrieval inconnu : {mode}")
 
+    def _retrieve_dense(
+        self, query: str, k: int, doc_filter: Optional[list[str]] = None
+    ) -> list[RetrievedChunk]:
+        """Cosinus pgvector via embeddings e5."""
+        qv = self.embedder.encode_query(query)
         sql = (
-            "SELECT doc_name, page_number, chunk_index, content, "
+            "SELECT id, doc_name, page_number, chunk_index, content, "
             "1 - (embedding <=> CAST(:qv AS vector)) AS score "
-            "FROM chunks "
-            "WHERE embedding IS NOT NULL"
+            "FROM chunks WHERE embedding IS NOT NULL"
         )
         params: dict[str, Any] = {"qv": qv, "k": k}
         if doc_filter:
             sql += " AND doc_name = ANY(:docs)"
             params["docs"] = doc_filter
         sql += " ORDER BY embedding <=> CAST(:qv AS vector) LIMIT :k"
-
         rows = self.session.execute(text(sql), params).fetchall()
         return [
             RetrievedChunk(
@@ -213,6 +230,151 @@ class RAGEngine:
             )
             for r in rows
         ]
+
+    @staticmethod
+    def _build_or_tsquery(query: str) -> str:
+        """
+        Convertit une requête naturelle en `to_tsquery` Postgres avec OR (`|`).
+        - Tokenize en gardant lettres FR/EN + chiffres + tirets (préserve `MQ-9`, `r20-7111`)
+        - Filtre les mots < 3 chars et un set de stopwords FR
+        - Joint avec ` | ` (OR logique). Si vide → chaîne nulle (retrieval renverra 0).
+
+        `to_tsquery` exige une syntaxe stricte ; les caractères spéciaux doivent
+        être échappés. On ne garde que des tokens propres pour éviter les erreurs.
+        """
+        import re
+
+        tokens = re.findall(r"[A-Za-zÀ-ÿ0-9\-]{2,}", query)
+        stop = {
+            "les", "des", "pour", "avec", "dans", "sur", "par", "est", "sont",
+            "comment", "quel", "quels", "quelle", "quelles", "aux", "que", "qui",
+            "une", "ces", "leur", "leurs", "cette", "tout", "tous", "toutes",
+            "etre", "etre", "avoir", "ete", "ont", "ait", "ainsi", "donc", "mais",
+            "plus", "moins", "tres", "bien", "encore", "deja", "non", "oui",
+        }
+        # Garde tokens longs OU contenant chiffres/tirets (typiquement acronymes/codes)
+        keep: list[str] = []
+        for t in tokens:
+            tl = t.lower()
+            if tl in stop:
+                continue
+            if len(t) >= 3 or any(c.isdigit() or c == "-" for c in t):
+                # tsquery interdit certains chars : on ne garde que [a-zA-Z0-9-_]
+                clean = re.sub(r"[^A-Za-zÀ-ÿ0-9_\-]", "", t)
+                if clean and len(clean) >= 2:
+                    keep.append(clean.lower())
+        # Dédupe en préservant l'ordre
+        seen: set[str] = set()
+        unique: list[str] = []
+        for t in keep:
+            if t not in seen:
+                seen.add(t)
+                unique.append(t)
+        return " | ".join(unique)
+
+    def _retrieve_bm25(
+        self, query: str, k: int, doc_filter: Optional[list[str]] = None
+    ) -> list[RetrievedChunk]:
+        """
+        BM25-like via Postgres : `ts_rank` sur `content_tsv`.
+
+        Stratégie : tokenize la question côté code et construit une `to_tsquery`
+        OR (`mot1 | mot2 | ...`) — chaque chunk contenant AU MOINS UN des termes
+        clés remontera, classé par densité lexicale (`ts_rank`).
+
+        Pourquoi pas `websearch_to_tsquery` : celui-ci met un AND implicite
+        entre tous les termes, ce qui renvoie 0 résultat dès que la question
+        a plus de 3-4 mots-clés (rare qu'un chunk contienne tout).
+        """
+        tsq_str = self._build_or_tsquery(query)
+        if not tsq_str:
+            return []
+        sql = (
+            "SELECT id, doc_name, page_number, chunk_index, content, "
+            "ts_rank(content_tsv, to_tsquery('french', :tsq)) AS score "
+            "FROM chunks "
+            "WHERE content_tsv @@ to_tsquery('french', :tsq)"
+        )
+        params: dict[str, Any] = {"tsq": tsq_str, "k": k}
+        if doc_filter:
+            sql += " AND doc_name = ANY(:docs)"
+            params["docs"] = doc_filter
+        sql += " ORDER BY score DESC LIMIT :k"
+        try:
+            rows = self.session.execute(text(sql), params).fetchall()
+        except Exception as ex:
+            logger.warning(f"[BM25] tsquery invalide ({ex}) → 0 résultats")
+            return []
+        return [
+            RetrievedChunk(
+                doc_name=r.doc_name,
+                page_number=r.page_number,
+                chunk_index=r.chunk_index,
+                content=r.content,
+                score=float(r.score),
+            )
+            for r in rows
+        ]
+
+    def _retrieve_hybrid(
+        self,
+        query: str,
+        k: int,
+        doc_filter: Optional[list[str]] = None,
+        rrf_k: int = 60,
+    ) -> list[RetrievedChunk]:
+        """
+        Reciprocal Rank Fusion : combine les rangs dense et BM25.
+        RRF_score(d) = 1/(k + rank_dense(d)) + 1/(k + rank_bm25(d))
+        avec k=60 (valeur standard, Cormack et al. 2009).
+        On retrieve `k_pool = k * 2` de chaque côté pour la fusion (~k * 2 candidats
+        au pool), puis on garde le top-k après RRF.
+        """
+        k_pool = max(k * 2, 30)
+        dense = self._retrieve_dense(query, k=k_pool, doc_filter=doc_filter)
+        bm25 = self._retrieve_bm25(query, k=k_pool, doc_filter=doc_filter)
+
+        # Indexe par (doc, page, chunk_index) pour fusionner — l'`id` SQL n'est
+        # pas dans RetrievedChunk, mais la clé (doc, page, idx) est unique.
+        ranks_dense: dict[tuple[str, int, int], int] = {
+            (c.doc_name, c.page_number, c.chunk_index): i + 1
+            for i, c in enumerate(dense)
+        }
+        ranks_bm25: dict[tuple[str, int, int], int] = {
+            (c.doc_name, c.page_number, c.chunk_index): i + 1
+            for i, c in enumerate(bm25)
+        }
+        by_key: dict[tuple[str, int, int], RetrievedChunk] = {
+            (c.doc_name, c.page_number, c.chunk_index): c for c in dense
+        }
+        for c in bm25:
+            by_key.setdefault((c.doc_name, c.page_number, c.chunk_index), c)
+
+        rrf_scores: dict[tuple[str, int, int], float] = {}
+        for key in by_key:
+            score = 0.0
+            if key in ranks_dense:
+                score += 1.0 / (rrf_k + ranks_dense[key])
+            if key in ranks_bm25:
+                score += 1.0 / (rrf_k + ranks_bm25[key])
+            rrf_scores[key] = score
+
+        ranked = sorted(by_key.values(), key=lambda c: rrf_scores[(c.doc_name, c.page_number, c.chunk_index)], reverse=True)
+
+        # On remplace `score` par le RRF pour pouvoir le tracer en aval
+        out: list[RetrievedChunk] = []
+        for c in ranked[:k]:
+            key = (c.doc_name, c.page_number, c.chunk_index)
+            out.append(
+                RetrievedChunk(
+                    doc_name=c.doc_name,
+                    page_number=c.page_number,
+                    chunk_index=c.chunk_index,
+                    content=c.content,
+                    score=rrf_scores[key],
+                )
+            )
+        return out
 
     @staticmethod
     def aggregate_to_pages(
@@ -322,6 +484,7 @@ class RAGEngine:
         doc_filter: Optional[list[str]] = None,
         retrieval_only: bool = False,
         decompose: bool = False,
+        retrieval_mode: Optional[str] = None,
     ) -> RAGResponse:
         """
         Pipeline complet : retrieval → agrégation pages → génération.
@@ -339,10 +502,11 @@ class RAGEngine:
 
         with tracker.measure():
             k = top_k_chunks or (settings.RAG_TOP_K * 3)
+            mode = retrieval_mode or settings.RETRIEVAL_MODE
             if decompose:
                 chunks = self.retrieve_chunks_decomposed(query, k=k, doc_filter=doc_filter)
             else:
-                chunks = self.retrieve_chunks(query, k=k, doc_filter=doc_filter)
+                chunks = self.retrieve_chunks(query, k=k, doc_filter=doc_filter, mode=mode)
 
             if not chunks:
                 tracker.log_summary()

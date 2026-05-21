@@ -62,6 +62,13 @@ def main() -> int:
         "Pour chaque question, génère 1-4 sous-questions, retrieve chacune, fusionne. "
         "Améliore le rappel sur les questions complexes type Q3 du sample.",
     )
+    parser.add_argument(
+        "--retrieval-mode",
+        choices=["dense", "bm25", "hybrid"],
+        default=None,
+        help="Mode de retrieval (défaut: valeur de RETRIEVAL_MODE dans .env). "
+        "`hybrid` fusionne dense (e5) et BM25 par RRF — meilleur sur les acronymes/noms propres rares.",
+    )
     parser.add_argument("--top-k-chunks", type=int, default=20)
     parser.add_argument("--top-n-pages", type=int, default=10)
     parser.add_argument("--context-chunks", type=int, default=10)
@@ -119,6 +126,7 @@ def main() -> int:
             attribution_threshold=args.attribution_threshold,
             retrieval_only=args.retrieval_only,
             decompose=args.decompose,
+            retrieval_mode=args.retrieval_mode,
         )
         out = runner.run(payload, with_task2=not args.no_task2)
 
