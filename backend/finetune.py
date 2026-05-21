@@ -1,17 +1,17 @@
-"""
+﻿"""
 CLI : fine-tune l'embedder e5 sur les paires (question, chunk) construites
 à partir d'un fichier au format `sample_queries.json`.
 
 Usage :
-    python finetune.py --gold ../Experimental/DATA/sample_queries.json
+    python finetune.py --gold ../Experimental/DATA/training/sample_queries.json
     python finetune.py --gold gold.json --output-dir models/e5-base-ft-run2 --epochs 5
     python finetune.py --gold gold.json --batch-size 4 --lr 1e-5 --val-ratio 0.0  # full train
     python finetune.py --gold gold.json --dry-run  # construit les paires sans entraîner
 
     # Combine plusieurs sources extra (OSINT target + questions synthétiques) :
-    python finetune.py --gold ../Experimental/DATA/sample_queries.json \
-        --extra-examples ../Experimental/DATA/extra_training_examples.json \
-                         ../Experimental/DATA/synthetic_questions.json
+    python finetune.py --gold ../Experimental/DATA/training/sample_queries.json \
+        --extra-examples ../Experimental/DATA/training/extra_training_examples.json \
+                         ../Experimental/DATA/training/synthetic_questions.json
 
 À la fin, le modèle est sauvegardé dans `models/<output_dir>` (et `<output_dir>.best`
 si une validation a tourné). Pour l'utiliser :

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Étude d'ablation : mesure l'impact individuel de chaque composant du pipeline.
 
 Compare plusieurs configurations sur les questions gold du sample_queries.json
@@ -21,7 +21,7 @@ Configurations comparées (toggles cumulables) :
 Usage :
     python ablation_study.py
     python ablation_study.py --filter-qids Q1,Q4  # restreindre pour économiser
-    python ablation_study.py --output ../Experimental/DATA/ablation.json
+    python ablation_study.py --output ../Experimental/DATA/runs/ablation.json
 """
 
 from __future__ import annotations
@@ -215,13 +215,13 @@ def main() -> int:
     parser.add_argument(
         "--gold",
         type=Path,
-        default=Path("../Experimental/DATA/sample_queries.json"),
+        default=Path("../Experimental/DATA/training/sample_queries.json"),
         help="Fichier sample_queries avec gold retrieved",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("../Experimental/DATA/ablation_results.json"),
+        default=Path("../Experimental/DATA/runs/ablation_results.json"),
     )
     parser.add_argument(
         "--filter-qids", type=str, default=None, help="Ex: 'Q1,Q4' pour limiter le coût"

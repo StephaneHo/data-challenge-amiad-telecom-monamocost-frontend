@@ -1,4 +1,4 @@
-# Responsible NLP Research checklist — Mon Amo Cost
+﻿# Responsible NLP Research checklist — Mon Amo Cost
 
 Réponses aux questions de la checklist
 [ACL ARR Responsible NLP Research](https://aclrollingreview.org/responsibleNLPresearch/).
@@ -108,7 +108,7 @@ hits@K. Pour l'instant, baseline n'a tourné qu'avec seed=42.
 ### C4. Sélection d'hyperparams documentée ?
 
 - Seuils d'attribution : grid search via `backend/calibrate_attribution.py` sur sample_queries
-  (sortie : `Experimental/DATA/attribution_calibration.json`)
+  (sortie : `Experimental/DATA/runs/attribution_calibration.json`)
 - Autres hyperparams : valeurs par défaut conservatrices, à ajuster après mesures GPU
 
 ### C5. Implémentation disponible publiquement ?

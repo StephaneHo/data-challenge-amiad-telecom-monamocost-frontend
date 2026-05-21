@@ -1,4 +1,4 @@
-# Model Card — Mon Amo Cost RAG (EvalLLM 2026)
+﻿# Model Card — Mon Amo Cost RAG (EvalLLM 2026)
 
 Suit les recommandations [Mitchell et al. 2019](https://arxiv.org/abs/1810.03993) et la
 [checklist ACL Responsible NLP Research](https://aclrollingreview.org/responsibleNLPresearch/).
@@ -127,9 +127,9 @@ du JSON de sortie challenge.
 - **Seed unique** : `42` (modifié dans `config.py` si besoin)
 - **Fichiers à versionner** pour reproduction complète :
   - Code : ce repo
-  - Données entraînement : `Experimental/DATA/training_pairs_full.json`
-  - Questions synthétiques : `Experimental/DATA/synthetic_questions.json`
-  - Paraphrases gold : `Experimental/DATA/gold_paraphrases.json`
+  - Données entraînement : `Experimental/DATA/training/training_pairs_full.json`
+  - Questions synthétiques : `Experimental/DATA/training/synthetic_questions.json`
+  - Paraphrases gold : `Experimental/DATA/training/gold_paraphrases.json`
   - Modèle entraîné : à publier sur HuggingFace Hub (`monamocost/e5-base-monamo-ft`)
 - **Hyperparams** : voir `backend/HANDOFF_FINETUNE.md`
 

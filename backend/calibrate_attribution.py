@@ -1,4 +1,4 @@
-"""
+﻿"""
 CLI : grid search sur les seuils d'attribution pour maximiser un F1 proxy.
 
 Méthode :
@@ -16,7 +16,7 @@ C'est un proxy car le challenge réel évalue au niveau segment, pas page agrég
 Mais ça permet de comparer des hyperparams entre eux à coût modéré.
 
 Usage :
-    python calibrate_attribution.py --gold ../Experimental/DATA/sample_queries.json
+    python calibrate_attribution.py --gold ../Experimental/DATA/training/sample_queries.json
     python calibrate_attribution.py --thresholds 0.75 0.80 0.85 --secondary 0.85 0.90 0.95
 """
 
@@ -155,8 +155,8 @@ def _score_run(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Grid search seuils Attribution")
-    parser.add_argument("--gold", type=Path, default=Path("../Experimental/DATA/sample_queries.json"))
-    parser.add_argument("--output", type=Path, default=Path("../Experimental/DATA/attribution_calibration.json"))
+    parser.add_argument("--gold", type=Path, default=Path("../Experimental/DATA/training/sample_queries.json"))
+    parser.add_argument("--output", type=Path, default=Path("../Experimental/DATA/runs/attribution_calibration.json"))
     parser.add_argument("--thresholds", type=float, nargs="+", default=[0.75, 0.78, 0.80, 0.82, 0.85])
     parser.add_argument("--secondary", type=float, nargs="+", default=[0.82, 0.85, 0.88])
     parser.add_argument("--topk", type=int, nargs="+", default=[1, 3])

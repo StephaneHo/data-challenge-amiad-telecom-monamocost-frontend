@@ -1,4 +1,4 @@
-# Mon Amo Cost @ EvalLLM 2026 — Une pipeline RAG frugale et reproductible pour la défense
+﻿# Mon Amo Cost @ EvalLLM 2026 — Une pipeline RAG frugale et reproductible pour la défense
 
 **Authors** : `<TODO: noms, prénoms>`
 **Affiliations** : `<TODO: institutions>`
@@ -211,7 +211,7 @@ Sur le sample_queries.json (Q1-Q4, exclusion du placeholder Q5) :
 
 **Reproduction** :
 ```bash
-python run_challenge.py --input ../Experimental/DATA/sample_queries.json \
+python run_challenge.py --input ../Experimental/DATA/training/sample_queries.json \
   --out-task1 sample_task1.json --out-task2 sample_task2.json
 python eval_retrieval.py --predictions sample_task1.json --gold sample_queries.json
 python eval_generation.py --predictions sample_task1.json --gold sample_queries.json
@@ -301,7 +301,7 @@ Tous les artefacts pour reproduire les expériences sont publics :
 | Artefact | Emplacement |
 |---|---|
 | Code | `<TODO: URL GitHub>` (licence MIT) |
-| Données d'entraînement consolidées | `Experimental/DATA/training_pairs_full.json` (2036 paires, `_is_gold` flag conservé) |
+| Données d'entraînement consolidées | `Experimental/DATA/training/training_pairs_full.json` (2036 paires, `_is_gold` flag conservé) |
 | Modèle fine-tuné | `<TODO: URL HuggingFace `monamocost/e5-base-monamo-ft`>` |
 | Prompts complets | inline dans `pipeline/synth_questions.py`, `pipeline/paraphrase_gold.py`, `pipeline/query_decomposition.py`, `rag/rag_engine.py` |
 | Hyperparamètres | inclus dans chaque sortie JSON (`parameters.*`) |

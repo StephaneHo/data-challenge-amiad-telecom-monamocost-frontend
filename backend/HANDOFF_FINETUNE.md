@@ -1,4 +1,4 @@
-# Fine-tuning de l'embedder e5-base — handoff GPU
+﻿# Fine-tuning de l'embedder e5-base — handoff GPU
 
 Document à fournir au collègue qui dispose d'un GPU pour exécuter le fine-tuning.
 
@@ -23,7 +23,7 @@ Le modèle entraîné servira d'embedder de retrieval dans la pipeline RAG du pr
 | `backend/pipeline/__init__.py` | Init module |
 | `backend/config.py` | Settings Pydantic (lit `EMBEDDING_MODEL`, etc.) |
 | `backend/.env.example` (à créer si manquant) | Variables d'env minimales |
-| `Experimental/DATA/training_pairs_full.json` | **1796 paires d'entraînement (autonome, pas de DB)** |
+| `Experimental/DATA/training/training_pairs_full.json` | **1796 paires d'entraînement (autonome, pas de DB)** |
 
 > 💡 Le fichier `training_pairs_full.json` ne nécessite **pas** Postgres ni de corpus PDF —
 > il contient déjà les paires `(question, paragraph, doc_name, page)` prêtes à l'emploi.
@@ -61,7 +61,7 @@ DATABASE_URL=sqlite:///dummy.db   # placeholder, jamais utilisé en mode --extra
 ```bash
 cd backend
 python finetune.py \
-  --extra-examples ../Experimental/DATA/training_pairs_full.json \
+  --extra-examples ../Experimental/DATA/training/training_pairs_full.json \
   --output-dir models/e5-base-monamo-ft \
   --model intfloat/multilingual-e5-base \
   --epochs 3 \
@@ -137,7 +137,7 @@ le meilleur checkpoint (val loss minimale).
 
 4. Évaluer le gain :
    ```powershell
-   python run_challenge.py --input ../Experimental/DATA/sample_queries.json --filter-qids Q1,Q2,Q3,Q4
+   python run_challenge.py --input ../Experimental/DATA/training/sample_queries.json --filter-qids Q1,Q2,Q3,Q4
    ```
    Comparer les `hits@5` / `hits@10` du JSON Tâche 1 produit avec ceux du baseline e5-base zero-shot.
 

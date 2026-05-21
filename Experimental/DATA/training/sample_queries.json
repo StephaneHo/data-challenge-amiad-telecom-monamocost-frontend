@@ -1,0 +1,132 @@
+{
+    "run_id": "Données illustratives - challenge RAG EvalLLM 2026",
+    "parameters": {
+        "retriever_version": 2,
+        "model_name": "MonLLM",
+        "temperature": 0.5
+    },
+    "results": [
+        {
+            "qid": "Q1",
+            "question": "Quel est l'objectif du projet \"Beehive\" de la Royal Navy, et quelles sont les caractéristiques clés des USV (véhicules de surface sans équipage) qu'elle souhaite acquérir dans ce cadre ?",
+            "retrieved": [
+                {
+                    "rank": 1,
+                    "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+                    "page": 17,
+                    "metadata": {
+                        "key": "value"
+                    }
+                }
+            ],
+            "answer": "Le projet **\"Beehive\"** de la Royal Navy a pour objectif de soutenir la formation, les développements technologiques et tactiques, tout en offrant une plate-forme d'expérimentation pour les systèmes autonomes. Dans ce cadre, la Royal Navy prévoit d'acquérir **20 USV** destinés à la flottille de surface (SURFLOT), qui seront déployés lors d'opérations nationales et internationales.\n\nCes USV serviront de **bancs d'essai** pour des technologies émergentes et de nouveaux concepts opérationnels. Ils présenteront initialement un **niveau de maturité technologique (TRL) de 4 ou 5**, mais seront conçus avec une **architecture ouverte** pour faciliter les mises à niveau futures. Le contrat, estimé à **10 millions de livres sterling**, est partiellement financé par UK Defence Innovation, bien que son lancement officiel dépende encore de l'approbation budgétaire finale.",
+            "metadata": {
+                "key": "value"
+            }
+        },
+        {
+            "qid": "Q2",
+            "question": "Comment l’intégration du drone MQ-9 Reaper dans l’Armée de l’air et de l’espace française se compare-t-elle à l’adoption potentielle du TEKEVER AR-3 pour des missions ISR (renseignement, surveillance et reconnaissance), en termes d’impact opérationnel et humain, notamment sur les besoins en équipages, la formation et la capacité d’évolution future des effectifs ?",
+            "retrieved": [
+                {
+                    "rank": 1,
+                    "doc_name": "r20-7111.pdf",
+                    "page": 22,
+                    "metadata": {
+                        "key": "value"
+                    }
+                },
+                {
+                    "rank": 2,
+                    "doc_name": "XPONENTIAL 2023 _ Ministère des Armées et des Anciens combattants.pdf",
+                    "page": 12,
+                    "metadata": {
+                        "key": "value"
+                    }
+                }
+            ],
+            "answer": "L’intégration du **MQ-9 Reaper** dans l’Armée de l’air et de l’espace française représente un **défi humain et opérationnel majeur**, avec des besoins en personnel importants (équipes de 4 aviateurs par drone) et une projection d’effectifs triplés d’ici 2030. Cette croissance s’accompagne de **filières de formation dédiées** et d’une refonte des parcours professionnels pour attirer et fidéliser les compétences.\n\nÀ l’inverse, le **TEKEVER AR-3**, conçu pour des missions ISR spécialisées, nécessiterait probablement **moins de personnel** et une formation moins complexe, grâce à son profil opérationnel simplifié (pas de composante armement, autonomie limitée à la surveillance). Son adoption s’appuierait sur une **approche modulaire**, avec des améliorations continues basées sur le retour d’expérience, sans exiger de transformation structurelle comparable à celle du Reaper.\n\nEn résumé, le Reaper s’inscrit dans une **stratégie capacitaire globale**, tandis que l’AR-3 offrirait une **solution plus agile et ciblée**, mais moins polyvalente. Le choix entre les deux dépendrait des priorités : **scalabilité et multi-rôle** pour le Reaper, **flexibilité et simplicité** pour l’AR-3.",
+            "metadata": {
+                "key": "value"
+            }
+        },
+        {
+            "qid": "Q3",
+            "question": "Comment les mesures anti-drones proposées en France, les capacités des munitions rôdeuses Anduril Altius 600M-V et AeroVironment Switchblade 300 vendues à Taïwan, et l’évolution de la stratégie navale chinoise face aux attaques d’USV ukrainiens illustrent-ils ensemble une tendance mondiale vers l’intégration de la guerre électronique, de la neutralisation des drones et des systèmes de défense multi-domaines ?",
+            "retrieved": [
+                {
+                    "rank": 1,
+                    "doc_name": "l15b4320_rapport-information.pdf",
+                    "page": 74,
+                    "metadata": {
+                        "key": "value"
+                    }
+                },
+                {
+                    "rank": 2,
+                    "doc_name": "ObsDrones - Bulletin de veille n3 - Mai Juin 2024.pdf",
+                    "page": 13,
+                    "metadata": {
+                        "key": "value"
+                    }
+                },
+                {
+                    "rank": 3,
+                    "doc_name": "ObsDrones - Bulletin de veille n2 - Mars Avril 2024.pdf",
+                    "page": 11,
+                    "metadata": {
+                        "key": "value"
+                    }
+                }
+            ],
+            "answer": "Il existe une **tendance mondiale vers l’intégration de la guerre électronique, de la neutralisation des drones et des systèmes de défense multi-domaines**, marquée par trois dynamiques clés :\n\n1. **Guerre électronique comme pilier défensif** :\n   La France légalise le **brouillage des drones** pour contrer les menaces immédiates, une capacité également centrale dans la **stratégie navale chinoise**, qui combine détection, brouillage et frappes préventives. Ces mesures visent directement les drones offensifs comme ceux vendus à Taïwan, dont les communications peuvent être perturbées.\n\n2. **Prolifération des drones offensifs et vulnérabilités associées** :\n   Les munitions rôdeuses **Altius 600M-V** et **Switchblade 300**, bien que performantes pour des frappes de précision, illustrent la **montée en puissance des drones légers** dans les conflits asymétriques. Leur efficacité dépend cependant de leur capacité à opérer dans des environnements **contestés par des contre-mesures électroniques** (comme en France) ou des défenses multi-couches (comme en Chine).\n\n3. **Défense multi-domaines et adaptation stratégique** :\n   La Chine, inspirée par les attaques d’USV ukrainiens, développe une **approche intégrée** (air, mer, électronique) pour contrer les drones, reflétant une évolution similaire à celle de la France, mais à une échelle navale. Cette convergence montre que les nations intègrent désormais **drones offensifs et contre-mesures** dans une **boucle d’innovation permanente**, où chaque avancée technologique (drones ou brouillage) entraîne une adaptation de l’adversaire.\n\nEn résumé, ces contextes soulignent un **équilibre dynamique** entre drones offensifs et défenses multi-domaines, où la guerre électronique joue un rôle central.",
+            "metadata": {
+                "key": "value"
+            }
+        },
+        {
+            "qid": "Q4",
+            "question": "Comment les méthodes de renseignement telles que l’OSINT et l’HUMINT pourraient-elles être intégrées aux missions de Tracfin ?",
+            "retrieved": [
+                {
+                    "rank": 1,
+                    "doc_name": "open-source-intelligence.pdf",
+                    "page": 4,
+                    "metadata": {
+                        "key": "value"
+                    }
+                },
+                {
+                    "rank": 2,
+                    "doc_name": "l16b1454_rapport-information.pdf",
+                    "page": 63,
+                    "metadata": {
+                        "key": "value"
+                    }
+                }
+            ],
+            "answer": "Pour renforcer la détection des circuits de financement étrangers dissimulés via des structures associatives cultuelles, Tracfin pourrait adopter une approche **combinant l’OSINT et l’HUMINT**, adaptée aux contraintes géopolitiques et technologiques.\n\n1. **Phase initiale : Analyse OSINT**\n   - Exploiter les données open-source (registres publics, transactions financières, médias) pour identifier des schémas suspects, comme des virements en cascade depuis des pays tiers ou des incohérences comptables dans les associations cultuelles. Cette méthode permet une **détection rapide et systématique** des anomalies.\n\n2. **Phase complémentaire : Enquête HUMINT**\n   - Dans les zones où les données numériques sont absentes ou manipulées (ex. : coupures Internet, opacité des montages financiers), déployer des sources humaines pour recueillir des informations sur le terrain. L’HUMINT permet de **valider les hypothèses** issues de l’OSINT et d’obtenir des preuves tangibles (témoignages, documents non numérisés).\n\n3. **Croisement et action**\n   - Croiser les résultats des deux méthodes pour confirmer les circuits de financement et identifier les acteurs clés. Les informations ainsi obtenues pourraient être partagées avec les services partenaires (DGSI, DGSE) pour des **actions ciblées** : enquêtes financières, mesures diplomatiques, ou application de la loi CRPR pour sanctionner les manquements à la transparence.\n\nCette approche permet de **contourner les limites technologiques** (en s’appuyant sur l’HUMINT lorsque l’OSINT est inefficace) tout en **optimisant la détection** grâce à la complémentarité des deux méthodes. Elle s’inscrit dans le cadre des missions de Tracfin, qui vise à lutter contre les ingérences étrangères et les financements opaques, notamment dans le domaine cultuel.",
+            "metadata": {
+                "key": "value"
+            }
+        },
+        {
+            "qid": "Q5",
+            "question": "Quels sont les drones capables de transporter et de larguer du matériel ?",
+            "retrieved": [
+                {
+                    "rank": 1,
+                    "doc_name": "TODO",
+                    "page": 42,
+                    "metadata": {
+                        "key": "value"
+                    }
+                }
+            ],
+            "answer": "TODO",
+            "metadata": {
+                "key": "value"
+            }
+        }
+    ]
+}

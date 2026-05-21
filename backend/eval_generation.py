@@ -1,4 +1,4 @@
-"""
+﻿"""
 CLI : évalue la **génération** d'un Task 1 JSON contre les réponses gold du sample.
 
 Deux métriques :
@@ -11,8 +11,8 @@ mais zero-dep additionnelle).
 
 Usage :
     python eval_generation.py \
-      --predictions ../Experimental/DATA/sample_task1.json \
-      --gold ../Experimental/DATA/sample_queries.json
+      --predictions ../Experimental/DATA/runs/sample_task1.json \
+      --gold ../Experimental/DATA/training/sample_queries.json
 
     # Skip le LLM judge (zero coût, juste BertScore-like) :
     python eval_generation.py --predictions ... --gold ... --no-judge

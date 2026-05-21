@@ -1,12 +1,12 @@
-"""
+﻿"""
 CLI : évalue un Task 1 JSON (le nôtre) contre un fichier gold (sample_queries
 ou format équivalent), avec les métriques officielles du challenge.
 
 Usage :
     # Compare nos sorties contre le gold du sample :
     python eval_retrieval.py \
-      --predictions ../Experimental/DATA/sample_task1.json \
-      --gold ../Experimental/DATA/sample_queries.json
+      --predictions ../Experimental/DATA/runs/sample_task1.json \
+      --gold ../Experimental/DATA/training/sample_queries.json
 
     # Filtrer une seule question :
     python eval_retrieval.py --predictions ... --gold ... --filter-qids Q1

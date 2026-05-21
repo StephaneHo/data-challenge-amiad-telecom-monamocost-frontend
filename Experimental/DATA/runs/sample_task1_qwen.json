@@ -1,0 +1,90 @@
+{
+  "run_id": "Données illustratives - challenge RAG EvalLLM 2026",
+  "parameters": {
+    "embedding_model": "intfloat/multilingual-e5-base",
+    "embedding_dim": 768,
+    "retriever_top_k_chunks": 20,
+    "retriever_top_n_pages": 10,
+    "llm_provider": "openai",
+    "llm_model": "qwen2.5:7b-instruct",
+    "temperature": 0.2,
+    "attribution_threshold": 0.8,
+    "attribution_secondary_threshold": 0.85,
+    "attribution_topk_per_sentence": 3,
+    "attribution_entity_filter": true,
+    "attribution_entity_min_support_ratio": 0.5,
+    "decompose_queries": false
+  },
+  "results": [
+    {
+      "qid": "Q1",
+      "question": "Quel est l'objectif du projet \"Beehive\" de la Royal Navy, et quelles sont les caractéristiques clés des USV (véhicules de surface sans équipage) qu'elle souhaite acquérir dans ce cadre ?",
+      "retrieved": [
+        {
+          "rank": 1,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 17,
+          "metadata": {}
+        },
+        {
+          "rank": 2,
+          "doc_name": "ObsDrones - Bulletin de veille n3 - Mai Juin 2024.pdf",
+          "page": 11,
+          "metadata": {}
+        },
+        {
+          "rank": 3,
+          "doc_name": "ObsDrones - Bulletin de veille n2 - Mars Avril 2024.pdf",
+          "page": 7,
+          "metadata": {}
+        },
+        {
+          "rank": 4,
+          "doc_name": "ObsDrones - Bulletin de veille n2 - Mars Avril 2024.pdf",
+          "page": 9,
+          "metadata": {}
+        },
+        {
+          "rank": 5,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 13,
+          "metadata": {}
+        },
+        {
+          "rank": 6,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 15,
+          "metadata": {}
+        },
+        {
+          "rank": 7,
+          "doc_name": "ObsDrones - Bulletin de veille n2 - Mars Avril 2024.pdf",
+          "page": 13,
+          "metadata": {}
+        },
+        {
+          "rank": 8,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 10,
+          "metadata": {}
+        },
+        {
+          "rank": 9,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 12,
+          "metadata": {}
+        },
+        {
+          "rank": 10,
+          "doc_name": "ObsDrones - Bulletin de veille n3 - Mai Juin 2024.pdf",
+          "page": 6,
+          "metadata": {}
+        }
+      ],
+      "answer": "# Objectif du projet \"Beehive\" de la Royal Navy\n\nLe projet Beehive lancé par la Royal Navy vise à soutenir la formation, les tactiques et le développement de la guerre tout en fournissant une plate-forme expérimentale pour les systèmes autonomes. Cette initiative permettra d'acquérir 20 USV qui seront utilisés par la flottille de surface (SURFLOT) dans le cadre d’opérations au Royaume-Uni et à l’étranger, servant de bancs d’essai pour les technologies émergentes et les nouveaux concepts opérationnels. Les premiers systèmes pourront avoir une TRL 4 ou 5 mais avec des architectures ouvertes pour des futures mises à niveau.\n\n## Caractéristiques Clés des USV\n\nLa Royal Navy souhaite acquérir des USV qui seront utilisés dans le cadre d’opérations au Royaume-Uni et à l’étranger. Ces USV serviront de bancs d’essai pour les technologies émergentes et les nouveaux concepts opérationnels, avec une valeur estimée du contrat de 10 millions de £, partie financée par UK Defence Innovation.\n\n### Exemple de USV : Corsair ASV\n\nLe secrétaire à la Marine américain a annoncé un contrat avec Saronic pour la production de son USV Corsair ASV. Ce contrat comprend une avance immédiate de 200 M$ sur le montant total disponible. Le Corsair ASV a une Tonneau de chargement (CU) de 453 kg et mesure 7,32 mètres de long avec une vitesse de 35 nœuds.\n\n### Développements en cours\n\nLa Royal Navy accélère ses plans pour mettre en œuvre des UAV sur ses porte-avions. Trois programmes clés sont identifiés : un UAS à voilure fixe pour remplacer le Crowsnest (Merlin), le Future Crewed Maritime Air System dédié à la recherche et sauvetage ainsi qu'à la lutte antiterroriste, et le VTOL ACP (Vertical Take-Off/Landing Autonomous Collaborative Platforms) qui vise à développer des capacités ISR, de logistique et de combat.\n\nSources :\n- [20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf p.17]\n- [ObsDrones - Bulletin de veille n3 - Mai Juin 2024.pdf p.9]",
+      "metadata": {
+        "tokens_used": 3696
+      }
+    }
+  ]
+}

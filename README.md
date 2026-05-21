@@ -1,4 +1,4 @@
-# Challenge RAG EvalLLM 2026 — Mon Amo Cost
+﻿# Challenge RAG EvalLLM 2026 — Mon Amo Cost
 
 Participation au [challenge **EvalLLM 2026** (atelier conjoint à la conférence TALN/CORIA)](https://evalllm2026.sciencesconf.org/).
 Pipeline RAG complète sur corpus PDFs FR (défense, renseignement) avec deux tâches :
@@ -127,9 +127,9 @@ docker exec postgres-rag psql -U postgres -d am-rag -c "SELECT doc_name, n_pages
 ```powershell
 # Lance Tâche 1 + Tâche 2 sur un fichier de questions au format challenge
 .\.venv\Scripts\python.exe run_challenge.py `
-  --input ..\Experimental\DATA\sample_queries.json `
-  --out-task1 ..\Experimental\DATA\sample_task1.json `
-  --out-task2 ..\Experimental\DATA\sample_task2.json
+  --input ..\Experimental\DATA\training\sample_queries.json `
+  --out-task1 ..\Experimental\DATA\runs\sample_task1.json `
+  --out-task2 ..\Experimental\DATA\runs\sample_task2.json
 ```
 
 Ou via l'API FastAPI :
@@ -197,7 +197,7 @@ d'une même question ne se retrouvent jamais à cheval entre train et val.
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe synth_questions.py `
-  --output ..\Experimental\DATA\synthetic_questions.json `
+  --output ..\Experimental\DATA\training\synthetic_questions.json `
   --questions-per-chunk 2
 ```
 
@@ -232,7 +232,7 @@ on diversifie le wording des questions ground-truth via paraphrasing LLM :
 
 **Coût** : ~$0,001 par run complet (négligeable). Durée : ~1 min.
 
-Le résultat va dans `Experimental/DATA/gold_paraphrases.json`, format prêt pour `--gold-extra`.
+Le résultat va dans `Experimental/DATA/training/gold_paraphrases.json`, format prêt pour `--gold-extra`.
 
 ### Étape 3 — Lancer le fine-tuning
 
@@ -240,10 +240,10 @@ Le résultat va dans `Experimental/DATA/gold_paraphrases.json`, format prêt pou
 
 ```powershell
 .\.venv\Scripts\python.exe finetune.py `
-  --gold ..\Experimental\DATA\sample_queries.json `
-  --gold-extra ..\Experimental\DATA\extra_training_examples.json `
-               ..\Experimental\DATA\gold_paraphrases.json `
-  --extra-examples ..\Experimental\DATA\synthetic_questions.json `
+  --gold ..\Experimental\DATA\training\sample_queries.json `
+  --gold-extra ..\Experimental\DATA\training\extra_training_examples.json `
+               ..\Experimental\DATA\training\gold_paraphrases.json `
+  --extra-examples ..\Experimental\DATA\training\synthetic_questions.json `
   --output-dir models\e5-base-monamo-ft `
   --epochs 3 --batch-size 8 --lr 2e-5 --val-ratio 0.2 `
   --gold-upweight 5 --question-dropout-gold 0.10
@@ -318,8 +318,8 @@ Le final est dans `models/e5-base-monamo-ft/`. **Prends le `.best` pour la suite
 3. **Comparer** les métriques avant/après sur le sample :
    ```powershell
    .\.venv\Scripts\python.exe run_challenge.py `
-     --input ..\Experimental\DATA\sample_queries.json `
-     --out-task1 ..\Experimental\DATA\sample_task1_ft.json
+     --input ..\Experimental\DATA\training\sample_queries.json `
+     --out-task1 ..\Experimental\DATA\runs\sample_task1_ft.json
    ```
    Comparer manuellement les `retrieved` du JSON produit aux gold de sample_queries.
 
@@ -337,10 +337,10 @@ d'entraînement** (sans dépendance à la DB Postgres) :
 
 ```powershell
 .\.venv\Scripts\python.exe finetune.py `
-  --gold ..\Experimental\DATA\sample_queries.json `
-  --extra-examples ..\Experimental\DATA\extra_training_examples.json `
-                   ..\Experimental\DATA\synthetic_questions.json `
-  --export-to ..\Experimental\DATA\training_pairs_full.json
+  --gold ..\Experimental\DATA\training\sample_queries.json `
+  --extra-examples ..\Experimental\DATA\training\extra_training_examples.json `
+                   ..\Experimental\DATA\training\synthetic_questions.json `
+  --export-to ..\Experimental\DATA\training\training_pairs_full.json
 ```
 
 Ton collègue n'a alors besoin **que de 2 fichiers** :

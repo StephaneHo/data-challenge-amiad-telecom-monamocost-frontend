@@ -1,4 +1,4 @@
-"""
+﻿"""
 CLI : génération synthétique de questions par chunk pour data augmentation.
 
 Sortie au format `extra_training_examples.json` (utilisable par
@@ -17,7 +17,7 @@ Usage :
     python synth_questions.py --doc-filter "open-source-intelligence.pdf" "l16b1454_rapport-information.pdf"
 
     # Sortie custom + 3 questions par chunk
-    python synth_questions.py --output ../Experimental/DATA/synthetic_v2.json --questions-per-chunk 3
+    python synth_questions.py --output ../Experimental/DATA/runs/synthetic_v2.json --questions-per-chunk 3
 
     # Ré-génère tout (ignore cache existant)
     python synth_questions.py --force
@@ -40,7 +40,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("../Experimental/DATA/synthetic_questions.json"),
+        default=Path("../Experimental/DATA/training/synthetic_questions.json"),
         help="Chemin du JSON de sortie (cache idempotent)",
     )
     parser.add_argument("--model", default="gpt-4o-mini", help="Modèle LLM (défaut: gpt-4o-mini)")
@@ -106,7 +106,7 @@ def main() -> int:
                 f"[CLI] {n} nouvelles paires synthétiques. Utiliser avec :"
             )
             logger.info(
-                f"  python finetune.py --gold ../Experimental/DATA/sample_queries.json "
+                f"  python finetune.py --gold ../Experimental/DATA/training/sample_queries.json "
                 f"--extra-examples {args.output}"
             )
     return 0

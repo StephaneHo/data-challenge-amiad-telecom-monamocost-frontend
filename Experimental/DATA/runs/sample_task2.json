@@ -1,0 +1,251 @@
+{
+  "run_id": "Données illustratives - challenge RAG EvalLLM 2026",
+  "parameters": {
+    "embedding_model": "intfloat/multilingual-e5-base",
+    "embedding_dim": 768,
+    "retriever_top_k_chunks": 20,
+    "retriever_top_n_pages": 10,
+    "llm_provider": "openai",
+    "llm_model": "gpt-4o-mini",
+    "temperature": 0.2,
+    "attribution_threshold": 0.8,
+    "attribution_topk_per_sentence": 1
+  },
+  "results": [
+    {
+      "qid": "Q1",
+      "attributions": [
+        {
+          "sid": "Q1_s0",
+          "text": "Le projet \"Beehive\" de la Royal Navy a pour objectif de soutenir la formation, le développement des capacités et les innovations tactiques en fournissant une plateforme expérimentale pour les systèmes autonomes.",
+          "attributed_to": [
+            {
+              "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+              "page": 17
+            }
+          ]
+        },
+        {
+          "sid": "Q1_s1",
+          "text": "Dans ce cadre, la Royal Navy cherche à acquérir 20 véhicules de surface sans équipage (USV) qui seront utilisés par la flottille de surface (SURFLOT) pour des opérations au Royaume-Uni et à l'étranger.",
+          "attributed_to": [
+            {
+              "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+              "page": 17
+            }
+          ]
+        },
+        {
+          "sid": "Q1_s2",
+          "text": "Ces USV serviront de bancs d'essai pour les technologies émergentes et les nouveaux concepts opérationnels.",
+          "attributed_to": [
+            {
+              "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+              "page": 12
+            }
+          ]
+        },
+        {
+          "sid": "Q1_s3",
+          "text": "Les premiers systèmes envisagés pourraient avoir un niveau de maturité technologique (TRL) de 4 ou 5, tout en étant dotés d'architectures ouvertes pour permettre des mises à niveau futures.",
+          "attributed_to": [
+            {
+              "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+              "page": 12
+            }
+          ]
+        },
+        {
+          "sid": "Q1_s4",
+          "text": "La valeur estimée du contrat pour ces acquisitions est de 10 millions de livres sterling, avec un financement partiel provenant de l'UK Defence Innovation [20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf p.17].",
+          "attributed_to": [
+            {
+              "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+              "page": 17
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "qid": "Q4",
+      "attributions": [
+        {
+          "sid": "Q4_s0",
+          "text": "L'intégration des méthodes de renseignement telles que l'OSINT (Open Source Intelligence) et l'HUMINT (Human Intelligence) dans les missions de Tracfin pourrait se faire de plusieurs manières, en tirant parti des spécificités de chaque méthode.",
+          "attributed_to": [
+            {
+              "doc_name": "open-source-intelligence.pdf",
+              "page": 4
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s1",
+          "text": "### 1. Complémentarité des méthodes",
+          "attributed_to": []
+        },
+        {
+          "sid": "Q4_s2",
+          "text": "L'OSINT, qui repose sur la collecte d'informations librement accessibles, pourrait enrichir les missions de Tracfin en fournissant des données contextuelles et des signaux faibles sur des activités financières suspectes.",
+          "attributed_to": [
+            {
+              "doc_name": "open-source-intelligence.pdf",
+              "page": 4
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s3",
+          "text": "Cette méthode permettrait d'étayer les investigations en identifiant des tendances ou des comportements associés à des actions d'ingérence financière, notamment en analysant les traces laissées sur Internet et d'autres sources ouvertes [open-source-intelligence.pdf p.4].",
+          "attributed_to": [
+            {
+              "doc_name": "open-source-intelligence.pdf",
+              "page": 4
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s4",
+          "text": "D'autre part, l'HUMINT, qui implique la collecte d'informations par des interactions humaines, pourrait être utilisée pour obtenir des renseignements plus précis et contextuels sur des réseaux d'influence ou des acteurs suspects.",
+          "attributed_to": [
+            {
+              "doc_name": "open-source-intelligence.pdf",
+              "page": 4
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s5",
+          "text": "Cette approche pourrait être particulièrement utile dans des situations où l'accès à des informations numériques est limité ou lorsque des connexions sont volontairement coupées [open-source-intelligence.pdf p.4].",
+          "attributed_to": [
+            {
+              "doc_name": "open-source-intelligence.pdf",
+              "page": 4
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s6",
+          "text": "### 2. Renforcement des capacités techniques",
+          "attributed_to": []
+        },
+        {
+          "sid": "Q4_s7",
+          "text": "Tracfin, en tant que cellule de renseignement financier, pourrait bénéficier d'un renforcement de ses capacités techniques pour intégrer ces méthodes.",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 62
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s8",
+          "text": "La loi de programmation militaire 2024-2030 souligne l'importance d'améliorer les capacités d'investigation numérique, ce qui pourrait inclure des outils pour l'analyse de données issues de l'OSINT et de l'HUMINT [l16b1454_rapport-information.pdf p.58].",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 58
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s9",
+          "text": "Cela permettrait à Tracfin de mieux détecter et analyser les flux financiers liés à des ingérences étrangères.",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 62
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s10",
+          "text": "### 3. Collaboration interservices",
+          "attributed_to": []
+        },
+        {
+          "sid": "Q4_s11",
+          "text": "Tracfin pourrait également renforcer sa collaboration avec d'autres services de renseignement, en s'appuyant sur leurs expertises respectives.",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 62
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s12",
+          "text": "Par exemple, le partage d'informations entre Tracfin et des services spécialisés dans la contre-ingérence pourrait permettre une meilleure identification des vecteurs financiers utilisés par des entités relais d'influence d'États tiers [l16b1454_rapport-information.pdf p.62].",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 62
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s13",
+          "text": "Cette approche collaborative pourrait maximiser l'efficacité des opérations de renseignement.",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 83
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s14",
+          "text": "### 4. Application des techniques de renseignement",
+          "attributed_to": []
+        },
+        {
+          "sid": "Q4_s15",
+          "text": "Enfin, l'utilisation de techniques de renseignement avancées, comme l'algorithme pour le traitement automatisé des données, pourrait être envisagée pour détecter des comportements suspects associés à des menaces d'ingérence.",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 83
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s16",
+          "text": "Bien que cette technique soit actuellement limitée à la prévention du terrorisme, son extension à d'autres domaines, comme le contre-espionnage, pourrait renforcer les capacités de Tracfin [l16b1454_rapport-information.pdf p.83].",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 83
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s17",
+          "text": "### Conclusion",
+          "attributed_to": []
+        },
+        {
+          "sid": "Q4_s18",
+          "text": "En résumé, l'intégration de l'OSINT et de l'HUMINT dans les missions de Tracfin pourrait se traduire par une complémentarité des méthodes, un renforcement des capacités techniques, une collaboration interservices accrue et l'application de techniques de renseignement avancées.",
+          "attributed_to": [
+            {
+              "doc_name": "open-source-intelligence.pdf",
+              "page": 4
+            }
+          ]
+        },
+        {
+          "sid": "Q4_s19",
+          "text": "Ces synergies permettraient à Tracfin de mieux lutter contre les ingérences financières et de protéger les intérêts fondamentaux de la Nation.",
+          "attributed_to": [
+            {
+              "doc_name": "l16b1454_rapport-information.pdf",
+              "page": 62
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

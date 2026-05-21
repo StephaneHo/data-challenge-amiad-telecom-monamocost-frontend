@@ -1,0 +1,8 @@
+[
+  {
+    "question": "Comment l'utilisation des logs de certificats peut-elle aider à découvrir l'infrastructure d'une cible sans se faire repérer ?",
+    "paragraph": "L'analyse des certificats SSL/TLS constitue une étape pivot dans la cartographie d'une infrastructure numérique. Chaque certificat contient des champs spécifiques, tels que le \"Common Name\" (CN) ou les \"Subject Alternative Names\" (SAN), qui révèlent souvent des sous-domaines cachés ou des environnements de pré-production. En utilisant des outils de recherche de certificats (CT Logs), un analyste peut identifier des actifs appartenant à une même organisation sans interaction directe avec la cible. Cette technique passive permet de contourner les protections de type pare-feu applicatif qui bloquent les scanners actifs. Il est recommandé de croiser ces données avec les enregistrements DNS historiques pour valider la persistance de l'infrastructure identifiée.",
+    "doc_name": "guide_osint_infrastructure_v2.pdf",
+    "page": 1
+  }
+]

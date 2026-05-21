@@ -1,4 +1,4 @@
-# Bascule vers un LLM open-source local
+﻿# Bascule vers un LLM open-source local
 
 Document : comment passer de `gpt-4o-mini` (API OpenAI) à un LLM open-source en local
 pour le **bonus frugalité + open-source** du challenge EvalLLM 2026.
@@ -102,7 +102,7 @@ LLM_JSON_VIA_PROMPT=true
 3. **Relancer la pipeline** :
    ```bash
    cd backend
-   python run_challenge.py --input ../Experimental/DATA/sample_queries.json \
+   python run_challenge.py --input ../Experimental/DATA/training/sample_queries.json \
      --out-task1 sample_task1_local.json \
      --out-task2 sample_task2_local.json
    ```

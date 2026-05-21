@@ -1,0 +1,156 @@
+{
+  "run_id": "Données illustratives - challenge RAG EvalLLM 2026",
+  "parameters": {
+    "embedding_model": "intfloat/multilingual-e5-base",
+    "embedding_dim": 768,
+    "retriever_top_k_chunks": 20,
+    "retriever_top_n_pages": 10,
+    "llm_provider": "openai",
+    "llm_model": "gpt-4o-mini",
+    "temperature": 0.2,
+    "attribution_threshold": 0.8,
+    "attribution_topk_per_sentence": 1
+  },
+  "results": [
+    {
+      "qid": "Q1",
+      "question": "Quel est l'objectif du projet \"Beehive\" de la Royal Navy, et quelles sont les caractéristiques clés des USV (véhicules de surface sans équipage) qu'elle souhaite acquérir dans ce cadre ?",
+      "retrieved": [
+        {
+          "rank": 1,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 17,
+          "metadata": {}
+        },
+        {
+          "rank": 2,
+          "doc_name": "ObsDrones - Bulletin de veille n3 - Mai Juin 2024.pdf",
+          "page": 11,
+          "metadata": {}
+        },
+        {
+          "rank": 3,
+          "doc_name": "ObsDrones - Bulletin de veille n2 - Mars Avril 2024.pdf",
+          "page": 7,
+          "metadata": {}
+        },
+        {
+          "rank": 4,
+          "doc_name": "ObsDrones - Bulletin de veille n2 - Mars Avril 2024.pdf",
+          "page": 9,
+          "metadata": {}
+        },
+        {
+          "rank": 5,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 13,
+          "metadata": {}
+        },
+        {
+          "rank": 6,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 15,
+          "metadata": {}
+        },
+        {
+          "rank": 7,
+          "doc_name": "ObsDrones - Bulletin de veille n2 - Mars Avril 2024.pdf",
+          "page": 13,
+          "metadata": {}
+        },
+        {
+          "rank": 8,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 10,
+          "metadata": {}
+        },
+        {
+          "rank": 9,
+          "doc_name": "20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf",
+          "page": 12,
+          "metadata": {}
+        },
+        {
+          "rank": 10,
+          "doc_name": "ObsDrones - Bulletin de veille n3 - Mai Juin 2024.pdf",
+          "page": 6,
+          "metadata": {}
+        }
+      ],
+      "answer": "Le projet \"Beehive\" de la Royal Navy a pour objectif de soutenir la formation, le développement des capacités et les innovations tactiques en fournissant une plateforme expérimentale pour les systèmes autonomes. Dans ce cadre, la Royal Navy cherche à acquérir 20 véhicules de surface sans équipage (USV) qui seront utilisés par la flottille de surface (SURFLOT) pour des opérations au Royaume-Uni et à l'étranger. Ces USV serviront de bancs d'essai pour les technologies émergentes et les nouveaux concepts opérationnels. Les premiers systèmes envisagés pourraient avoir un niveau de maturité technologique (TRL) de 4 ou 5, tout en étant dotés d'architectures ouvertes pour permettre des mises à niveau futures. La valeur estimée du contrat pour ces acquisitions est de 10 millions de livres sterling, avec un financement partiel provenant de l'UK Defence Innovation [20260108_NP_Obsdrones_Bulletin-de-veille-n12_0.pdf p.17].",
+      "metadata": {
+        "tokens_used": 4300
+      }
+    },
+    {
+      "qid": "Q4",
+      "question": "Comment les méthodes de renseignement telles que l’OSINT et l’HUMINT pourraient-elles être intégrées aux missions de Tracfin ?",
+      "retrieved": [
+        {
+          "rank": 1,
+          "doc_name": "open-source-intelligence.pdf",
+          "page": 4,
+          "metadata": {}
+        },
+        {
+          "rank": 2,
+          "doc_name": "l16b1454_rapport-information.pdf",
+          "page": 62,
+          "metadata": {}
+        },
+        {
+          "rank": 3,
+          "doc_name": "l16b1454_rapport-information.pdf",
+          "page": 58,
+          "metadata": {}
+        },
+        {
+          "rank": 4,
+          "doc_name": "l16b1454_rapport-information.pdf",
+          "page": 5,
+          "metadata": {}
+        },
+        {
+          "rank": 5,
+          "doc_name": "open-source-intelligence.pdf",
+          "page": 9,
+          "metadata": {}
+        },
+        {
+          "rank": 6,
+          "doc_name": "open-source-intelligence.pdf",
+          "page": 8,
+          "metadata": {}
+        },
+        {
+          "rank": 7,
+          "doc_name": "l16b1454_rapport-information.pdf",
+          "page": 83,
+          "metadata": {}
+        },
+        {
+          "rank": 8,
+          "doc_name": "l16b1454_rapport-information.pdf",
+          "page": 123,
+          "metadata": {}
+        },
+        {
+          "rank": 9,
+          "doc_name": "l16b1454_rapport-information.pdf",
+          "page": 30,
+          "metadata": {}
+        },
+        {
+          "rank": 10,
+          "doc_name": "l16b1454_rapport-information.pdf",
+          "page": 63,
+          "metadata": {}
+        }
+      ],
+      "answer": "L'intégration des méthodes de renseignement telles que l'OSINT (Open Source Intelligence) et l'HUMINT (Human Intelligence) dans les missions de Tracfin pourrait se faire de plusieurs manières, en tirant parti des spécificités de chaque méthode.\n\n### 1. Complémentarité des méthodes\n\nL'OSINT, qui repose sur la collecte d'informations librement accessibles, pourrait enrichir les missions de Tracfin en fournissant des données contextuelles et des signaux faibles sur des activités financières suspectes. Cette méthode permettrait d'étayer les investigations en identifiant des tendances ou des comportements associés à des actions d'ingérence financière, notamment en analysant les traces laissées sur Internet et d'autres sources ouvertes [open-source-intelligence.pdf p.4].\n\nD'autre part, l'HUMINT, qui implique la collecte d'informations par des interactions humaines, pourrait être utilisée pour obtenir des renseignements plus précis et contextuels sur des réseaux d'influence ou des acteurs suspects. Cette approche pourrait être particulièrement utile dans des situations où l'accès à des informations numériques est limité ou lorsque des connexions sont volontairement coupées [open-source-intelligence.pdf p.4].\n\n### 2. Renforcement des capacités techniques\n\nTracfin, en tant que cellule de renseignement financier, pourrait bénéficier d'un renforcement de ses capacités techniques pour intégrer ces méthodes. La loi de programmation militaire 2024-2030 souligne l'importance d'améliorer les capacités d'investigation numérique, ce qui pourrait inclure des outils pour l'analyse de données issues de l'OSINT et de l'HUMINT [l16b1454_rapport-information.pdf p.58]. Cela permettrait à Tracfin de mieux détecter et analyser les flux financiers liés à des ingérences étrangères.\n\n### 3. Collaboration interservices\n\nTracfin pourrait également renforcer sa collaboration avec d'autres services de renseignement, en s'appuyant sur leurs expertises respectives. Par exemple, le partage d'informations entre Tracfin et des services spécialisés dans la contre-ingérence pourrait permettre une meilleure identification des vecteurs financiers utilisés par des entités relais d'influence d'États tiers [l16b1454_rapport-information.pdf p.62]. Cette approche collaborative pourrait maximiser l'efficacité des opérations de renseignement.\n\n### 4. Application des techniques de renseignement\n\nEnfin, l'utilisation de techniques de renseignement avancées, comme l'algorithme pour le traitement automatisé des données, pourrait être envisagée pour détecter des comportements suspects associés à des menaces d'ingérence. Bien que cette technique soit actuellement limitée à la prévention du terrorisme, son extension à d'autres domaines, comme le contre-espionnage, pourrait renforcer les capacités de Tracfin [l16b1454_rapport-information.pdf p.83].\n\n### Conclusion\n\nEn résumé, l'intégration de l'OSINT et de l'HUMINT dans les missions de Tracfin pourrait se traduire par une complémentarité des méthodes, un renforcement des capacités techniques, une collaboration interservices accrue et l'application de techniques de renseignement avancées. Ces synergies permettraient à Tracfin de mieux lutter contre les ingérences financières et de protéger les intérêts fondamentaux de la Nation.",
+      "metadata": {
+        "tokens_used": 3573
+      }
+    }
+  ]
+}

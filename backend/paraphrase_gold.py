@@ -1,4 +1,4 @@
-"""
+﻿"""
 CLI : génère des paraphrases LLM des questions gold pour data augmentation.
 
 Sortie au format `extra_training_examples.json`, utilisable par
@@ -7,10 +7,10 @@ Sortie au format `extra_training_examples.json`, utilisable par
 Workflow combiné avec word dropout (option A) et lower upweight (option C) :
     python paraphrase_gold.py
     python finetune.py \
-      --gold ../Experimental/DATA/sample_queries.json \
-      --gold-extra ../Experimental/DATA/extra_training_examples.json \
-                   ../Experimental/DATA/gold_paraphrases.json \
-      --extra-examples ../Experimental/DATA/synthetic_questions.json \
+      --gold ../Experimental/DATA/training/sample_queries.json \
+      --gold-extra ../Experimental/DATA/training/extra_training_examples.json \
+                   ../Experimental/DATA/training/gold_paraphrases.json \
+      --extra-examples ../Experimental/DATA/training/synthetic_questions.json \
       --gold-upweight 5 \
       --question-dropout-gold 0.10 \
       --epochs 3
@@ -20,10 +20,10 @@ Usage standalone :
     python paraphrase_gold.py --dry-run
 
     # Génération depuis sample_queries.json (lit la DB pour les paragraphes)
-    python paraphrase_gold.py --gold ../Experimental/DATA/sample_queries.json
+    python paraphrase_gold.py --gold ../Experimental/DATA/training/sample_queries.json
 
     # Génération depuis un fichier extra autonome (sans DB)
-    python paraphrase_gold.py --gold-extra ../Experimental/DATA/extra_training_examples.json
+    python paraphrase_gold.py --gold-extra ../Experimental/DATA/training/extra_training_examples.json
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def main() -> int:
     parser.add_argument(
         "--gold",
         type=Path,
-        default=Path("../Experimental/DATA/sample_queries.json"),
+        default=Path("../Experimental/DATA/training/sample_queries.json"),
         help="JSON au format sample_queries (questions + retrieved doc/page). "
         "Nécessite la DB. Mettre à None (--gold '') pour ignorer.",
     )
@@ -83,13 +83,13 @@ def main() -> int:
         "--gold-extra",
         type=Path,
         nargs="+",
-        default=[Path("../Experimental/DATA/extra_training_examples.json")],
+        default=[Path("../Experimental/DATA/training/extra_training_examples.json")],
         help="Fichier(s) JSON gold autonomes (ex: OSINT du target.txt)",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("../Experimental/DATA/gold_paraphrases.json"),
+        default=Path("../Experimental/DATA/training/gold_paraphrases.json"),
         help="JSON de sortie (cache idempotent)",
     )
     parser.add_argument("--model", default="gpt-4o-mini")

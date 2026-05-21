@@ -1,4 +1,4 @@
-# Datasheet — Données du projet Mon Amo Cost
+﻿# Datasheet — Données du projet Mon Amo Cost
 
 Suit le template [Gebru et al. 2021, *Datasheets for Datasets*](https://arxiv.org/abs/1803.09010).
 
@@ -53,7 +53,7 @@ Chaque instance est un objet JSON :
 | Synthétiques par chunk (886 chunks × 2 questions, modulo filtre) | 1772 | false |
 | **Total** | **2036** | 264 gold / 1772 synth |
 
-Fichier consolidé : `Experimental/DATA/training_pairs_full.json` (~2.7 MB).
+Fichier consolidé : `Experimental/DATA/training/training_pairs_full.json` (~2.7 MB).
 
 ### Le dataset est-il un échantillon d'un ensemble plus large ?
 

@@ -1,9 +1,9 @@
-"""
+﻿"""
 CLI : exécute Tâche 1 + Tâche 2 du challenge sur un fichier JSON d'entrée
 et écrit les sorties sur disque.
 
 Usage :
-    python run_challenge.py --input ../Experimental/DATA/sample_queries.json
+    python run_challenge.py --input ../Experimental/DATA/training/sample_queries.json
     python run_challenge.py --input questions.json --out-task1 t1.json --out-task2 t2.json
     python run_challenge.py --input questions.json --no-task2 --retrieval-only
     python run_challenge.py --input questions.json --filter-qids Q1,Q4

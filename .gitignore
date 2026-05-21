@@ -16,6 +16,10 @@ backend/models/
 # Data
 data/
 *.pdf
+# Exception : on garde les JSON d'entraînement / sample queries du challenge,
+# mais on n'inclut JAMAIS le corpus brut (les PDFs du challenge ne sont pas redistribuables).
+!Experimental/DATA/
+Experimental/DATA/Corpus_raw/
 
 # Node
 node_modules/

@@ -1,4 +1,4 @@
-"""
+﻿"""
 CLI : évalue un Task 2 JSON (le nôtre) contre un Task 2 gold.
 
 Calcule les **deux blocs** de métriques officiels du challenge EvalLLM 2026 :
@@ -14,8 +14,8 @@ ce script peut être utilisé pour :
 
 Usage :
     python eval_attribution.py \
-      --predictions ../Experimental/DATA/my_task2.json \
-      --gold ../Experimental/DATA/gold_task2.json
+      --predictions ../Experimental/DATA/runs/my_task2.json \
+      --gold ../Experimental/DATA/runs/gold_task2.json
 
     # Sur un sous-ensemble :
     python eval_attribution.py --predictions ... --gold ... --filter-qids Q1,Q4
