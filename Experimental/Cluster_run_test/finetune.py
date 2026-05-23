@@ -16,6 +16,38 @@ from sentence_transformers import SentenceTransformer
 import pandas as pd
 
 
+# ── Sous-échantillonnage corpus ───────────────────────────────────────────────
+
+def subsample_paragraphs(
+    df: pd.DataFrame,
+    max_paragraphs_per_doc: int | None = None,
+    max_samples: int | None = None,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Réduit le corpus en gardant tous les documents (similarité progressive préservée)."""
+    if max_paragraphs_per_doc is None and max_samples is None:
+        return df
+
+    parts = []
+    for _, group in df.groupby("nom_du_fichier", sort=False):
+        g = group.reset_index(drop=True)
+        if max_paragraphs_per_doc and len(g) > max_paragraphs_per_doc:
+            if max_paragraphs_per_doc == 1:
+                indices = [0]
+            else:
+                indices = sorted({
+                    round(i * (len(g) - 1) / (max_paragraphs_per_doc - 1))
+                    for i in range(max_paragraphs_per_doc)
+                })
+            g = g.iloc[indices]
+        parts.append(g)
+
+    out = pd.concat(parts, ignore_index=True)
+    if max_samples and len(out) > max_samples:
+        out = out.sample(n=max_samples, random_state=seed).reset_index(drop=True)
+    return out
+
+
 # ── Similarité progressive ────────────────────────────────────────────────────
 
 def compute_sim(doc_order, i, j, doc_i, doc_j):
@@ -87,14 +119,36 @@ def collate_fn(batch):
 
 # ── Encode avec gradient ──────────────────────────────────────────────────────
 
-def encode_with_grad(model, texts, device):
-    features = model.tokenize(texts)
-    features = {
-        k: v.to(device) if isinstance(v, torch.Tensor) else v
-        for k, v in features.items()
-    }
-    emb = model(features)["sentence_embedding"]
-    return F.normalize(emb, p=2, dim=-1)
+def encode_with_grad(model, texts, device, max_seq_length=None, encode_batch_size=None):
+    """Encode texts with gradients, optionally chunked to limit VRAM."""
+    if not texts:
+        raise ValueError("encode_with_grad: liste de textes vide")
+
+    if encode_batch_size is None or len(texts) <= encode_batch_size:
+        features = model.tokenize(texts)
+        if max_seq_length is not None:
+            for key in ("input_ids", "attention_mask"):
+                if key in features:
+                    features[key] = features[key][:, :max_seq_length]
+        features = {
+            k: v.to(device) if isinstance(v, torch.Tensor) else v
+            for k, v in features.items()
+        }
+        emb = model(features)["sentence_embedding"]
+        return F.normalize(emb, p=2, dim=-1)
+
+    chunks = []
+    for start in range(0, len(texts), encode_batch_size):
+        chunks.append(
+            encode_with_grad(
+                model,
+                texts[start : start + encode_batch_size],
+                device,
+                max_seq_length=max_seq_length,
+                encode_batch_size=None,
+            )
+        )
+    return torch.cat(chunks, dim=0)
 
 
 # ── Soft similarity loss ──────────────────────────────────────────────────────
@@ -152,6 +206,30 @@ def load_checkpoint(resume_from, model, optimizer, scheduler, scaler, device):
     return state["epoch"]   # start_epoch = epoch déjà terminée
 
 
+# ── Device ────────────────────────────────────────────────────────────────────
+
+def _resolve_device():
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        print(f"Device : {device}")
+        print(f"GPU    : {torch.cuda.get_device_name(0)}")
+        print(f"VRAM   : {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+        return device
+
+    device = torch.device("cpu")
+    print(f"Device : {device}")
+    print(f"PyTorch : {torch.__version__} (build CUDA : {torch.version.cuda or 'aucun'})")
+    print(
+        "⚠ CUDA indisponible — le script tourne sur CPU.\n"
+        "  Cause probable : torch installé en variante +cpu.\n"
+        "  Fix (venv uv backend/.venv — ne pas utiliser pip seul) :\n"
+        "    uv pip uninstall torch\n"
+        "    uv pip install torch --index-url https://download.pytorch.org/whl/cu128\n"
+        "  Vérifier via ..\\backend\\.venv\\Scripts\\python.exe -c \"import torch; print(torch.cuda.is_available())\""
+    )
+    return device
+
+
 # ── Fine-tuning ───────────────────────────────────────────────────────────────
 
 def fine_tune(
@@ -164,15 +242,14 @@ def fine_tune(
     temperature:  float = 0.07,
     k_pos:        int   = 4,
     k_neg:        int   = 8,
-    warmup_steps: int   = 100,      # ← nouveau
-    resume_from:  str   = None,     # ← nouveau  ex: "models/e5-finetuned/checkpoints/epoch_2"
+    warmup_steps: int   = 100,
+    resume_from:  str   = None,
+    log_every:    int   = 10,
+    max_seq_length: int | None = 512,
+    encode_batch_size: int | None = 64,
 ) -> SentenceTransformer:
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device : {device}")
-    if device.type == "cuda":
-        print(f"GPU    : {torch.cuda.get_device_name(0)}")
-        print(f"VRAM   : {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+    device = _resolve_device()
 
     ckpt_dir = os.path.join(output_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -208,6 +285,8 @@ def fine_tune(
         start_epoch = load_checkpoint(resume_from, model, optimizer, scheduler, scaler, device)
 
     print(f"Mixed precision fp16 : {'activé' if use_amp else 'désactivé'}")
+    print(f"Max seq length : {max_seq_length or 'modèle (défaut)'}")
+    print(f"Encode batch size : {encode_batch_size or 'illimité (attention VRAM)'}")
     print(f"Corpus : {len(dataset)} paragraphes | {len(dataloader)} steps/epoch")
     print(f"Scheduler : warmup {warmup_steps} steps → cosine sur {total_steps} steps")
     print(f"Epochs : {start_epoch+1} → {epochs}\n")
@@ -222,11 +301,19 @@ def fine_tune(
             target_sims = target_sims.to(device)
 
             with autocast(device_type=device.type, enabled=use_amp):
-                a_emb = encode_with_grad(model, anchors,    device)
-                c_emb = encode_with_grad(model, candidates, device)
-                loss  = soft_similarity_loss(a_emb, c_emb, target_sims, k, temperature)
+                a_emb = encode_with_grad(
+                    model, anchors, device,
+                    max_seq_length=max_seq_length,
+                    encode_batch_size=encode_batch_size,
+                )
+                c_emb = encode_with_grad(
+                    model, candidates, device,
+                    max_seq_length=max_seq_length,
+                    encode_batch_size=encode_batch_size,
+                )
+                loss = soft_similarity_loss(a_emb, c_emb, target_sims, k, temperature)
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -234,7 +321,7 @@ def fine_tune(
             global_step += 1
 
             total_loss += loss.item()
-            if step % 10 == 0:
+            if log_every > 0 and step % log_every == 0:
                 vram = torch.cuda.memory_allocated() / 1e9 if use_amp else 0.0
                 print(
                     f"  Epoch {epoch+1}/{epochs} | Step {step:4d}/{len(dataloader)} | "
