@@ -45,6 +45,19 @@ def get_openai_client() -> Any:
     return OpenAI(**kwargs)
 
 
+def get_mistral_client() -> Any:
+    """
+    Client OpenAI SDK pointant sur l'API Mistral (compatible OpenAI).
+    Clé lue depuis `MISTRAL_API_KEY` ou fallback `LLM_API_KEY`.
+    """
+    from openai import OpenAI
+
+    api_key = settings.MISTRAL_API_KEY or settings.LLM_API_KEY
+    if not api_key:
+        raise ValueError("MISTRAL_API_KEY requis pour LLM_PROVIDER=mistral")
+    return OpenAI(api_key=api_key, base_url="https://api.mistral.ai/v1")
+
+
 def chat_json(
     client: Any,
     model: str,

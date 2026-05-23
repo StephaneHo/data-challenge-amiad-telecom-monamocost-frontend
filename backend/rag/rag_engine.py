@@ -140,6 +140,10 @@ class RAGEngine:
             from utils.llm import get_openai_client
 
             self._llm_client = get_openai_client()
+        elif self.llm_provider == "mistral":
+            from utils.llm import get_mistral_client
+
+            self._llm_client = get_mistral_client()
         elif self.llm_provider == "anthropic":
             import anthropic
 
@@ -445,7 +449,7 @@ class RAGEngine:
         temp = temperature if temperature is not None else settings.RAG_TEMPERATURE
         client = self._build_llm()
 
-        if self.llm_provider == "openai":
+        if self.llm_provider in ("openai", "mistral"):
             # max_tokens=800 borne la durée de génération sur LLM local lent (Qwen/Mistral
             # sur CPU peuvent générer indéfiniment). Sur gpt-4o-mini c'est large.
             resp = client.chat.completions.create(
