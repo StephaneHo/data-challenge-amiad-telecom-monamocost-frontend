@@ -1,3 +1,18 @@
-torch>=2.1.0
+# Dépendances communes
 sentence-transformers>=2.7.0
 pandas>=2.0.0
+
+# ── PyTorch GPU (RTX 4080, driver NVIDIA ≥ 525) ─────────────────────────────
+# Le venv backend/.venv est géré par uv (Python 3.14) : pas de pip dedans.
+# NE PAS utiliser "pip install" seul → installe dans le Python global (user site-packages).
+#
+# Depuis backend/ (ou avec chemin explicite) :
+#
+#   uv pip uninstall torch
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+#
+# Vérification (toujours via le python du venv) :
+#   ..\\backend\\.venv\\Scripts\\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+#   → attendu : 2.x.x+cu128  True
+#
+# Prérequis système : pilote NVIDIA à jour (nvidia-smi), pas besoin d'installer CUDA Toolkit séparément.

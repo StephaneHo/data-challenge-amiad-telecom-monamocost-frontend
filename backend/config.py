@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # LLM
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    MISTRAL_API_KEY: str = ""
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4o-mini"
 
