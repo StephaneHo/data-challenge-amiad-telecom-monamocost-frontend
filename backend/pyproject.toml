@@ -34,3 +34,11 @@ experimental = [
     "pymupdf>=1.24.0",
     "pytesseract>=0.3.13",
 ]
+# Décodage contraint (Outlines) pour servir un LLM open-source local
+# avec contrainte de grammaire JSON Schema. Pas requis pour utiliser
+# OpenAI Structured Outputs / Mistral JSON mode (qui se contraignent
+# côté serveur). Installer via : `uv sync --group constrained`.
+constrained = [
+    "outlines>=0.1.0",
+    "jsonschema>=4.20.0",
+]

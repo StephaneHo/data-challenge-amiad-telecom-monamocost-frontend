@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # Hybride améliore les questions contenant des entités exactes rares
     # (acronymes, codes, noms propres) que le dense pur peut manquer.
     RETRIEVAL_MODE: str = "hybrid"
+    RERANK_ENABLED: bool = False
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RERANKER_BATCH_SIZE: int = 16
+    RERANKER_TOP_K: int = 30
 
     # LLM
     OPENAI_API_KEY: str = ""

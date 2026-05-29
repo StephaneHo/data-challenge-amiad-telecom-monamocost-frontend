@@ -36,11 +36,34 @@ def get_runner(db: Session = Depends(get_db)) -> ChallengeRunner:
 async def challenge_run(
     payload: ChallengeInput,
     with_task2: bool = True,
-    runner: ChallengeRunner = Depends(get_runner),
+    rerank: bool | None = None,
+    reranker_model: str | None = None,
+    reranker_top_k: int | None = None,
+    reranker_batch_size: int | None = None,
+    constrained_decoding: bool = False,
+    constrained_backend: str = "auto",
+    db: Session = Depends(get_db),
 ) -> ChallengeOutput:
     """
     Prend un JSON au format challenge EvalLLM 2026 (avec questions seules),
     exécute le retrieval + génération (Tâche 1) puis l'attribution (Tâche 2
     si `with_task2=True`), et retourne les deux runs dans un seul payload.
+
+    - `constrained_decoding=true` : force la sortie LLM dans un schéma JSON
+      strict (citations parsées, pas de troncature de format).
+    - `constrained_backend` : choix du backend
+      (`auto`/`openai_schema`/`mistral_json`/`anthropic_tool`/`vllm_guided`/
+      `outlines_local`/`fallback_repair`).
+    - `rerank=true` : reclasser le grand pool de chunks avec un CrossEncoder
+      avant l'agrégation en pages et la génération.
     """
+    runner = ChallengeRunner(
+        session=db,
+        rerank=rerank,
+        reranker_model=reranker_model,
+        reranker_top_k=reranker_top_k,
+        reranker_batch_size=reranker_batch_size,
+        constrained=constrained_decoding,
+        constrained_backend=constrained_backend,
+    )
     return runner.run(payload, with_task2=with_task2)

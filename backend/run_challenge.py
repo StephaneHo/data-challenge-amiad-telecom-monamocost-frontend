@@ -72,12 +72,67 @@ def main() -> int:
     parser.add_argument("--top-k-chunks", type=int, default=20)
     parser.add_argument("--top-n-pages", type=int, default=10)
     parser.add_argument("--context-chunks", type=int, default=10)
+    parser.add_argument(
+        "--rerank",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Active le reranking CrossEncoder après le retrieval initial. "
+        "Sans ce flag, utilise RERANK_ENABLED depuis .env.",
+    )
+    parser.add_argument(
+        "--reranker-model",
+        type=str,
+        default=None,
+        help=(
+            "Modèle CrossEncoder de reranking "
+            "(défaut: RERANKER_MODEL dans .env)."
+        ),
+    )
+    parser.add_argument(
+        "--reranker-top-k",
+        type=int,
+        default=None,
+        help=(
+            "Nombre de chunks conservés après reranking "
+            "(défaut: RERANKER_TOP_K)."
+        ),
+    )
+    parser.add_argument(
+        "--reranker-batch-size",
+        type=int,
+        default=None,
+        help=(
+            "Batch size du reranker CrossEncoder "
+            "(défaut: RERANKER_BATCH_SIZE)."
+        ),
+    )
     parser.add_argument("--attribution-threshold", type=float, default=0.80)
     parser.add_argument(
         "--filter-qids",
         type=str,
         default=None,
-        help="Liste de qids séparés par des virgules (ex: 'Q1,Q4') — restreint à ces questions",
+        help=(
+            "Liste de qids séparés par des virgules (ex: 'Q1,Q4') "
+            "— restreint à ces questions"
+        ),
+    )
+    parser.add_argument(
+        "--constrained-decoding",
+        action="store_true",
+        help="Active la couche de décodage contraint (grammar-guided generation). "
+        "Le LLM est forcé à produire un JSON conforme à un schéma Pydantic "
+        "(answer + citations structurées) — supprime les erreurs de format et "
+        "rend les citations directement parsables. Compatible OpenAI Structured "
+        "Outputs, Mistral JSON mode, vLLM guided_json et Outlines local.",
+    )
+    parser.add_argument(
+        "--constrained-backend",
+        choices=["auto", "openai_schema", "mistral_json", "anthropic_tool",
+                 "vllm_guided", "outlines_local", "fallback_repair"],
+        default="auto",
+        help="Choix du backend de décodage contraint (défaut: auto = selon LLM_PROVIDER). "
+        "`outlines_local` charge un modèle HF in-process avec Outlines "
+        "(installer `uv sync --group constrained`).",
     )
     args = parser.parse_args()
 
@@ -91,6 +146,10 @@ def main() -> int:
                 top_n_pages=args.top_n_pages,
                 context_chunks=args.context_chunks,
                 attribution_threshold=args.attribution_threshold,
+                rerank=args.rerank,
+                reranker_model=args.reranker_model,
+                reranker_top_k=args.reranker_top_k,
+                reranker_batch_size=args.reranker_batch_size,
             )
             task2 = runner.run_task2_standalone(external)
         out_task2 = args.out_task2 or args.task2_from.parent / f"{args.task2_from.stem}_task2.json"
@@ -127,6 +186,12 @@ def main() -> int:
             retrieval_only=args.retrieval_only,
             decompose=args.decompose,
             retrieval_mode=args.retrieval_mode,
+            rerank=args.rerank,
+            reranker_model=args.reranker_model,
+            reranker_top_k=args.reranker_top_k,
+            reranker_batch_size=args.reranker_batch_size,
+            constrained=args.constrained_decoding,
+            constrained_backend=args.constrained_backend,
         )
         out = runner.run(payload, with_task2=not args.no_task2)
 
