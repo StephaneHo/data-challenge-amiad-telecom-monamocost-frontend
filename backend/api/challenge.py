@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from rag.attribution import AttributedSentence
-from rag.rag_engine import RAGEngine, RetrievedChunk
+from rag.rag_engine import RAGEngine
 
 
 # ──────────────────────── Schémas — entrée ────────────────────────────────
@@ -117,6 +117,12 @@ class ChallengeRunner:
         retrieval_only: bool = False,
         decompose: bool = False,
         retrieval_mode: Optional[str] = None,
+        rerank: Optional[bool] = None,
+        reranker_model: Optional[str] = None,
+        reranker_top_k: Optional[int] = None,
+        reranker_batch_size: Optional[int] = None,
+        constrained: bool = False,
+        constrained_backend: str = "auto",
     ) -> None:
         self.session = session
         self.engine = engine or RAGEngine(session=session)
@@ -131,6 +137,14 @@ class ChallengeRunner:
         self.retrieval_only = retrieval_only
         self.decompose = decompose
         self.retrieval_mode = retrieval_mode or settings.RETRIEVAL_MODE
+        self.rerank = settings.RERANK_ENABLED if rerank is None else rerank
+        self.reranker_model = reranker_model or settings.RERANKER_MODEL
+        self.reranker_top_k = reranker_top_k or settings.RERANKER_TOP_K
+        self.reranker_batch_size = (
+            reranker_batch_size or settings.RERANKER_BATCH_SIZE
+        )
+        self.constrained = constrained
+        self.constrained_backend = constrained_backend
 
     def _parameters(self) -> dict[str, Any]:
         return {
@@ -148,6 +162,16 @@ class ChallengeRunner:
             "attribution_entity_min_support_ratio": self.attribution_entity_min_support_ratio,
             "decompose_queries": self.decompose,
             "retrieval_mode": self.retrieval_mode,
+            "rerank_enabled": self.rerank,
+            "reranker_model": self.reranker_model if self.rerank else None,
+            "reranker_top_k": self.reranker_top_k if self.rerank else None,
+            "reranker_batch_size": (
+                self.reranker_batch_size if self.rerank else None
+            ),
+            "constrained_decoding": self.constrained,
+            "constrained_backend": (
+                self.constrained_backend if self.constrained else None
+            ),
         }
 
     def _attributions_to_items(
@@ -186,8 +210,20 @@ class ChallengeRunner:
                 retrieval_only=self.retrieval_only,
                 decompose=self.decompose,
                 retrieval_mode=self.retrieval_mode,
+                rerank=self.rerank,
+                reranker_model=self.reranker_model,
+                reranker_top_k=self.reranker_top_k,
+                reranker_batch_size=self.reranker_batch_size,
+                constrained=self.constrained,
+                constrained_backend=self.constrained_backend,
             )
 
+            q_meta: dict[str, Any] = {"tokens_used": resp.tokens_used}
+            if resp.constrained_backend:
+                q_meta["constrained_backend"] = resp.constrained_backend
+                q_meta["structured_citations"] = resp.structured_citations
+                if resp.invalid_citations:
+                    q_meta["invalid_citations"] = resp.invalid_citations
             task1_results.append(
                 Task1Result(
                     qid=q.qid,
@@ -197,7 +233,7 @@ class ChallengeRunner:
                         for r in resp.retrieved
                     ],
                     answer=resp.answer,
-                    metadata={"tokens_used": resp.tokens_used},
+                    metadata=q_meta,
                 )
             )
 

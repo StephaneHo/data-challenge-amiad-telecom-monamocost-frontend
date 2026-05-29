@@ -141,6 +141,133 @@ Ou via l'API FastAPI :
 
 ---
 
+## Reranking (optionnel)
+
+Le reranking ajoute un second tri après le retrieval dense/BM25/hybride. Il permet
+de sortir un grand pool initial (`--top-k-chunks 100` ou `1000`), puis de garder
+les chunks les plus pertinents pour l'agrégation `(doc_name, page)` et le contexte LLM.
+
+Configuration possible dans `backend/.env` :
+
+```env
+RERANK_ENABLED=false
+RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+RERANKER_TOP_K=30
+RERANKER_BATCH_SIZE=16
+```
+
+Test standard avec pool initial de 100 chunks :
+
+```powershell
+cd data-challenge-amiad-telecom-monamocost-frontend\backend
+.\.venv\Scripts\python.exe run_challenge.py `
+  --input ..\Experimental\DATA\training\sample_queries.json `
+  --out-task1 ..\Experimental\DATA\runs\sample_task1_rerank.json `
+  --out-task2 ..\Experimental\DATA\runs\sample_task2_rerank.json `
+  --retrieval-mode hybrid `
+  --top-k-chunks 100 `
+  --rerank `
+  --reranker-top-k 30 `
+  --context-chunks 10
+```
+
+Test plus large pour les documents très similaires :
+
+```powershell
+.\.venv\Scripts\python.exe run_challenge.py `
+  --input ..\Experimental\DATA\training\sample_queries.json `
+  --out-task1 ..\Experimental\DATA\runs\sample_task1_rerank_k1000.json `
+  --out-task2 ..\Experimental\DATA\runs\sample_task2_rerank_k1000.json `
+  --retrieval-mode hybrid `
+  --top-k-chunks 1000 `
+  --rerank `
+  --reranker-top-k 30 `
+  --context-chunks 10
+```
+
+Pour comparer uniquement le retrieval/reranking, sans appel LLM :
+
+```powershell
+.\.venv\Scripts\python.exe run_challenge.py `
+  --input ..\Experimental\DATA\training\sample_queries.json `
+  --out-task1 ..\Experimental\DATA\runs\sample_task1_rerank_retrieval_only.json `
+  --no-task2 `
+  --retrieval-only `
+  --retrieval-mode hybrid `
+  --top-k-chunks 100 `
+  --rerank `
+  --reranker-top-k 30
+```
+
+Via l'API FastAPI :
+
+```http
+POST /challenge/run?rerank=true&reranker_top_k=30
+```
+
+---
+
+## Décodage contraint (optionnel)
+
+Le pipeline officiel peut forcer la sortie du LLM dans un schéma JSON strict via
+le flag `--constrained-decoding`. Utile pour :
+
+- garantir un format de réponse stable même sur Mistral local / Qwen / Llama,
+- récupérer les citations structurées (`doc_name` + `page`) sans regex,
+- détecter les **citations hors-pool** (hallucinations type `[doc_inconnu.pdf p.X]`)
+  en les loggant en `metadata.invalid_citations`.
+
+Le module `backend/utils/structured_decoder.py` dispatch selon le provider :
+
+| Provider configuré | Backend automatique | Mécanisme |
+|---|---|---|
+| `openai` (cloud) | `openai_schema` | Structured Outputs `json_schema` strict |
+| `openai` + `LLM_BASE_URL` | `vllm_guided` | vLLM `extra_body.guided_json` |
+| `mistral` | `mistral_json` | JSON mode + validation Pydantic |
+| `anthropic` | `anthropic_tool` | Tool use `input_schema` |
+| LLM HF local | `outlines_local` | Outlines `generate.json` (in-process) |
+
+Pour le backend `outlines_local` (Outlines côté client) :
+```powershell
+.\.venv\Scripts\uv.exe sync --group constrained
+```
+
+Utilisation :
+```powershell
+# Backend choisi automatiquement selon LLM_PROVIDER
+.\.venv\Scripts\python.exe run_challenge.py `
+  --input ..\Experimental\DATA\training\sample_queries.json `
+  --constrained-decoding
+
+# Forcer un backend explicite (ex: Outlines local sur un Mistral-7B HF)
+.\.venv\Scripts\python.exe run_challenge.py `
+  --input ..\Experimental\DATA\training\sample_queries.json `
+  --constrained-decoding `
+  --constrained-backend outlines_local
+```
+
+Via l'API FastAPI :
+```http
+POST /challenge/run?constrained_decoding=true&constrained_backend=auto
+```
+
+Le JSON Tâche 1 produit annote chaque question avec :
+```json
+"metadata": {
+  "tokens_used": 4913,
+  "constrained_backend": "openai_schema",
+  "structured_citations": [{"doc_name": "...", "page": 17}],
+  "invalid_citations": []
+}
+```
+
+`structured_citations` est la liste des citations *présentes dans le pool retrieval*,
+`invalid_citations` la liste des citations rejetées (doc/page que le LLM a inventé
+ou mal recopié, hors top-K). Le champ `answer` reste un texte avec citations inline
+`[doc.pdf p.N]` pour rester compatible avec l'attribution Tâche 2.
+
+---
+
 ## Fine-tuning de l'embedder
 
 ### Pourquoi fine-tuner ?

@@ -16,6 +16,7 @@ from rag.attribution import (
     Attributor,
     RetrievedChunkForAttribution,
 )
+from rag.reranker import Reranker
 from utils.carbon import CarbonTracker
 
 
@@ -48,6 +49,9 @@ class RAGResponse:
     parameters: dict[str, Any] = field(default_factory=dict)
     tokens_used: int = 0
     carbon: dict[str, Any] = field(default_factory=dict)
+    constrained_backend: Optional[str] = None
+    structured_citations: list[dict[str, Any]] = field(default_factory=list)
+    invalid_citations: list[dict[str, Any]] = field(default_factory=list)
 
 
 class RAGEngine:
@@ -130,6 +134,7 @@ class RAGEngine:
         self.llm_model = llm_model or settings.LLM_MODEL
         self._llm_client: Any = None  # initialisé paresseusement
         self._decomposer: Optional[QueryDecomposer] = None
+        self._reranker: Optional[Reranker] = None
 
     def _build_llm(self) -> Any:
         if self._llm_client is not None:
@@ -151,6 +156,19 @@ class RAGEngine:
         else:
             raise ValueError(f"Provider LLM inconnu : {self.llm_provider}")
         return self._llm_client
+
+    def _get_reranker(
+        self,
+        model_name: str,
+        batch_size: int,
+    ) -> Reranker:
+        if (
+            self._reranker is None
+            or self._reranker.model_name != model_name
+            or self._reranker.batch_size != batch_size
+        ):
+            self._reranker = Reranker(model_name=model_name, batch_size=batch_size)
+        return self._reranker
 
     # ──────────────────────── Retrieval ────────────────────────
 
@@ -489,6 +507,12 @@ class RAGEngine:
         retrieval_only: bool = False,
         decompose: bool = False,
         retrieval_mode: Optional[str] = None,
+        rerank: Optional[bool] = None,
+        reranker_model: Optional[str] = None,
+        reranker_top_k: Optional[int] = None,
+        reranker_batch_size: Optional[int] = None,
+        constrained: bool = False,
+        constrained_backend: str = "auto",
     ) -> RAGResponse:
         """
         Pipeline complet : retrieval → agrégation pages → génération.
@@ -507,6 +531,12 @@ class RAGEngine:
         with tracker.measure():
             k = top_k_chunks or (settings.RAG_TOP_K * 3)
             mode = retrieval_mode or settings.RETRIEVAL_MODE
+            rerank_enabled = settings.RERANK_ENABLED if rerank is None else rerank
+            effective_reranker_model = reranker_model or settings.RERANKER_MODEL
+            effective_reranker_top_k = reranker_top_k or settings.RERANKER_TOP_K
+            effective_reranker_batch_size = (
+                reranker_batch_size or settings.RERANKER_BATCH_SIZE
+            )
             if decompose:
                 chunks = self.retrieve_chunks_decomposed(query, k=k, doc_filter=doc_filter)
             else:
@@ -517,8 +547,30 @@ class RAGEngine:
                 return RAGResponse(
                     question=query,
                     answer="Aucun extrait pertinent trouvé dans la base documentaire.",
-                    parameters=self._params_dict(k=k, top_n=top_n_pages),
+                    parameters=self._params_dict(
+                        k=k,
+                        top_n=top_n_pages,
+                        rerank_enabled=rerank_enabled,
+                        reranker_model=effective_reranker_model,
+                        reranker_top_k=effective_reranker_top_k,
+                    ),
                     carbon=tracker.metrics.to_dict(),
+                )
+
+            if rerank_enabled:
+                reranker = self._get_reranker(
+                    model_name=effective_reranker_model,
+                    batch_size=effective_reranker_batch_size,
+                )
+                before_count = len(chunks)
+                chunks = reranker.rerank(
+                    query=query,
+                    chunks=chunks,
+                    top_k=effective_reranker_top_k,
+                )
+                logger.info(
+                    f"[Reranker] {before_count} chunks → {len(chunks)} chunks "
+                    f"avec {effective_reranker_model}"
                 )
 
             retrieved_pages = self.aggregate_to_pages(chunks, top_n=top_n_pages)
@@ -530,7 +582,13 @@ class RAGEngine:
                     answer="",
                     retrieved=retrieved_pages,
                     chunks=chunks,
-                    parameters=self._params_dict(k=k, top_n=top_n_pages),
+                    parameters=self._params_dict(
+                        k=k,
+                        top_n=top_n_pages,
+                        rerank_enabled=rerank_enabled,
+                        reranker_model=effective_reranker_model,
+                        reranker_top_k=effective_reranker_top_k,
+                    ),
                     carbon=tracker.metrics.to_dict(),
                 )
 
@@ -558,9 +616,16 @@ class RAGEngine:
             answer=answer_txt,
             retrieved=retrieved_pages,
             chunks=chunks,
-            parameters=self._params_dict(k=k, top_n=top_n_pages),
+            parameters=self._params_dict(
+                k=k,
+                top_n=top_n_pages,
+                rerank_enabled=rerank_enabled,
+                reranker_model=effective_reranker_model,
+                reranker_top_k=effective_reranker_top_k,
+            ),
             tokens_used=tokens,
             carbon=tracker.metrics.to_dict(),
+            constrained_backend=constrained_backend if constrained else None,
         )
 
     def attribute(
@@ -604,12 +669,22 @@ class RAGEngine:
         ]
         return attributor.attribute(qid=qid, answer=answer, chunks=attribution_chunks)
 
-    def _params_dict(self, k: int, top_n: Optional[int]) -> dict[str, Any]:
+    def _params_dict(
+        self,
+        k: int,
+        top_n: Optional[int],
+        rerank_enabled: bool,
+        reranker_model: Optional[str],
+        reranker_top_k: Optional[int],
+    ) -> dict[str, Any]:
         return {
             "embedding_model": self.embedder.model_name,
             "embedding_dim": self.embedder.dim,
             "retriever_top_k_chunks": k,
             "retriever_top_n_pages": top_n,
+            "rerank_enabled": rerank_enabled,
+            "reranker_model": reranker_model if rerank_enabled else None,
+            "reranker_top_k": reranker_top_k if rerank_enabled else None,
             "llm_provider": self.llm_provider,
             "llm_model": self.llm_model,
             "temperature": settings.RAG_TEMPERATURE,
